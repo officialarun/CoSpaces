@@ -1,0 +1,33 @@
+{
+  "name": "fractional-land-spv-platform",
+  "version": "1.0.0",
+  "description": "Compliant fractional land investment platform with SPV formation for India",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd packages/frontend && npm install && cd ../backend && npm install",
+    "dev:backend": "cd packages/backend && npm run dev",
+    "dev:frontend": "cd packages/frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "cd packages/backend && npm run build",
+    "build:frontend": "cd packages/frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start:backend": "cd packages/backend && npm start",
+    "start:frontend": "cd packages/frontend && npm start"
+  },
+  "keywords": [
+    "spv",
+    "fractional-investment",
+    "real-estate",
+    "compliance",
+    "india"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
