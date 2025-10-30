@@ -105,8 +105,14 @@ const userSchema = new mongoose.Schema({
     default: 'pending'
   },
   kycCompletedAt: Date,
+  kycRejectionReason: String, // Admin-provided reason for KYC rejection
+  
+  // Account Status
+  isActive: {
+    type: Boolean,
+    default: true
+  },
   kycExpiryDate: Date,
-  kycRejectionReason: String,
   
   // AML Status
   amlStatus: {

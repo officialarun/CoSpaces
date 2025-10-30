@@ -54,12 +54,13 @@ exports.getProjects = async (req, res, next) => {
 
 exports.getListedProjects = async (req, res, next) => {
   try {
+    // Return all publicly visible projects (listed, fundraising, and approved)
     const projects = await Project.find({
-      status: 'listed',
+      status: { $in: ['listed', 'fundraising', 'approved'] },
       isPublic: true
     })
       .select('-checklist -dueDiligence')
-      .sort({ 'timeline.listedAt': -1 });
+      .sort({ 'timeline.listedAt': -1, createdAt: -1 });
       
     res.json({ success: true, data: { projects } });
   } catch (error) {
@@ -76,8 +77,26 @@ exports.getProjectById = async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
+
+    // Attach funding progress (subscriptions + payments)
+    const Subscription = require('../models/Subscription.model');
+    const Payment = require('../models/Payment.model');
+    const [subAgg, payAgg] = await Promise.all([
+      Subscription.aggregate([
+        { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
+        { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
+      ]),
+      Payment.aggregate([
+        { $match: { project: project._id, status: 'captured' } },
+        { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
+      ])
+    ]);
+
+    const raisedPaid = (subAgg?.[0]?.totalPaid || 0) + (payAgg?.[0]?.total || 0);
+    const projObj = project.toObject();
+    projObj.funding = { raisedPaid, target: project.financials?.targetRaise || 0 };
     
-    res.json({ success: true, data: { project } });
+    res.json({ success: true, data: { project: projObj } });
   } catch (error) {
     next(error);
   }

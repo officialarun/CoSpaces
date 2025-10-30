@@ -7,15 +7,18 @@
     "packages/*"
   ],
   "scripts": {
-    "install:all": "npm install && cd packages/frontend && npm install && cd ../backend && npm install",
+    "install:all": "npm install && cd packages/frontend && npm install && cd ../backend && npm install && cd ../admin-frontend && npm install",
     "dev:backend": "cd packages/backend && npm run dev",
     "dev:frontend": "cd packages/frontend && npm run dev",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:admin": "cd packages/admin-frontend && npm run dev",
+    "dev": "concurrently -n \"backend,frontend,admin\" -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:admin\"",
     "build:backend": "cd packages/backend && npm run build",
     "build:frontend": "cd packages/frontend && npm run build",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build:admin": "cd packages/admin-frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:admin",
     "start:backend": "cd packages/backend && npm start",
-    "start:frontend": "cd packages/frontend && npm start"
+    "start:frontend": "cd packages/frontend && npm start",
+    "start:admin": "cd packages/admin-frontend && npm start"
   },
   "keywords": [
     "spv",

@@ -1,0 +1,114 @@
+import { useEffect, useState } from 'react';
+import { adminProjectAPI, adminSPVAPI, adminTrustAPI } from '../lib/api';
+import { FaLink } from 'react-icons/fa';
+import toast from 'react-hot-toast';
+
+export default function AssignSPVTab() {
+  const [projects, setProjects] = useState([]);
+  const [spvs, setSpvs] = useState([]);
+  const [trusts, setTrusts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [assignFor, setAssignFor] = useState(null);
+  const [selectedSPV, setSelectedSPV] = useState('');
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      // Recalculate funding on load so eligible projects auto-mark as funded
+      await adminProjectAPI.recalcFunding().catch(()=>{});
+      const [projRes, spvRes, trustRes] = await Promise.all([
+        adminProjectAPI.getProjects({ status: 'funded' }),
+        adminSPVAPI.getSPVs({}),
+        adminTrustAPI.getTrusts(),
+      ]);
+      setProjects((projRes.data.data.projects||[]).filter(p=>!p.spv));
+      setSpvs(spvRes.data.data.spvs||[]);
+      setTrusts(trustRes.data.data.trusts||[]);
+    } catch (e) {
+      toast.error('Failed to load data');
+    } finally { setLoading(false); }
+  };
+
+  const assign = async () => {
+    if (!assignFor || !selectedSPV) return;
+    try {
+      await adminProjectAPI.assignSPV(assignFor._id, selectedSPV);
+      toast.success('SPV assigned');
+      setAssignFor(null); setSelectedSPV('');
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Failed to assign SPV');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-gray-900">Assign SPV to Project</h2>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Project</th><th>Code</th><th>City</th><th>Status</th><th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? <tr><td colSpan={5} className="p-6 text-center">Loading...</td></tr> : projects.length===0 ? <tr><td colSpan={5} className="p-6 text-center">No eligible projects</td></tr> : projects.map(p => (
+                <tr key={p._id}>
+                  <td>{p.projectName}</td>
+                  <td>{p.projectCode}</td>
+                  <td>{p?.landDetails?.location?.city}</td>
+                  <td className="capitalize">{p.status}</td>
+                  <td>
+                    <div className="flex justify-end">
+                      <button className="px-3 py-2 rounded-xl bg-primary-600 text-white shadow hover:bg-primary-700 transition flex items-center gap-2" onClick={()=>{ setAssignFor(p); setSelectedSPV(''); }}>
+                        <FaLink/> Assign SPV
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {assignFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold">Assign SPV to {assignFor.projectName}</h3>
+              <button className="btn-secondary" onClick={()=>setAssignFor(null)}>Close</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Select SPV</label>
+                <select className="input" value={selectedSPV} onChange={(e)=>setSelectedSPV(e.target.value)}>
+                  <option value="">Select</option>
+                  {trusts.map(t => (
+                    <optgroup key={t._id} label={`Trust: ${t.name}`}>
+                      {spvs.filter(s=>s.trust?._id===t._id).map(s => (
+                        <option key={s._id} value={s._id}>{s.name} {s.registrationNumber?`(${s.registrationNumber})`:''}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button className="btn-secondary" onClick={()=>setAssignFor(null)}>Cancel</button>
+                <button className="btn-primary" disabled={!selectedSPV} onClick={assign}>Assign</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+

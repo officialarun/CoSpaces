@@ -28,12 +28,60 @@ router.post('/mfa/verify-login', authController.verifyMFALogin);
 // Google OAuth routes
 router.get(
   '/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
+  (req, res, next) => {
+    // Pass state parameter through to callback
+    const state = req.query.state;
+    const options = {
+      scope: ['profile', 'email'],
+      state: state // Preserve state for callback
+    };
+    passport.authenticate('google', options)(req, res, next);
+  }
 );
 
 router.get(
   '/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login' }),
+  (req, res, next) => {
+    passport.authenticate('google', (err, user, info) => {
+      if (err) {
+        console.error('Google OAuth Error:', err);
+        // Determine redirect URL from state parameter
+        let redirectURL = 'http://localhost:3000/login?error=auth_failed';
+        try {
+          if (req.query.state) {
+            const state = JSON.parse(decodeURIComponent(req.query.state));
+            if (state.isAdmin && state.redirectUrl) {
+              redirectURL = `${state.redirectUrl}/login?error=auth_failed`;
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse state:', parseError);
+        }
+        return res.redirect(redirectURL);
+      }
+
+      if (!user) {
+        console.warn('Google OAuth: No user returned');
+        // Determine redirect URL from state parameter
+        let redirectURL = 'http://localhost:3000/login?error=no_user';
+        try {
+          if (req.query.state) {
+            const state = JSON.parse(decodeURIComponent(req.query.state));
+            if (state.isAdmin && state.redirectUrl) {
+              redirectURL = `${state.redirectUrl}/login?error=no_user`;
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse state:', parseError);
+        }
+        return res.redirect(redirectURL);
+      }
+
+      // Authentication successful
+      req.user = user;
+      next();
+    })(req, res, next);
+  },
   authController.googleCallback
 );
 

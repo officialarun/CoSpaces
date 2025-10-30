@@ -3,7 +3,8 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '../../lib/auth';
-import { projectAPI, subscriptionAPI, complianceAPI } from '../../lib/api';
+import { projectAPI, complianceAPI } from '../../lib/api';
+import { loadRazorpay } from '../../lib/razorpay';
 import toast from 'react-hot-toast';
 import { FaMapMarkerAlt, FaRupeeSign, FaCalendar, FaChartLine, FaCheckCircle, FaUsers, FaFileAlt } from 'react-icons/fa';
 
@@ -35,6 +36,11 @@ export default function ProjectDetail() {
     }
   };
 
+  // Funding progress derived values
+  const raised = project?.funding?.raisedPaid || 0;
+  const target = project?.financials?.targetRaise || 0;
+  const pct = target > 0 ? Math.min(100, Math.floor((raised / target) * 100)) : 0;
+
   const checkEligibility = async () => {
     if (!isAuthenticated()) {
       router.push('/login');
@@ -57,21 +63,80 @@ export default function ProjectDetail() {
 
   const handleInvest = async () => {
     const amount = parseFloat(investAmount);
-    
     if (!amount || amount < project.financials.minimumInvestment) {
       toast.error(`Minimum investment is ₹${project.financials.minimumInvestment.toLocaleString()}`);
       return;
     }
+    if (!isAuthenticated()) {
+      router.push('/login');
+      return;
+    }
+
+    const sdkReady = await loadRazorpay();
+    if (!sdkReady) {
+      toast.error('Failed to load payment gateway');
+      return;
+    }
 
     try {
-      await subscriptionAPI.createSubscription({
-        spvId: project.spv,
-        committedAmount: amount
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+      const res = await fetch(`${API_BASE}/payments/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ projectId: project._id, amountInINR: amount })
       });
-      toast.success('Investment subscription created! Complete the process in your dashboard.');
-      router.push('/dashboard/subscriptions');
-    } catch (error) {
-      toast.error(error.error || 'Failed to create subscription');
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Order creation failed');
+
+      const { keyId, orderId, amount: amountPaise, currency } = data.data;
+      const options = {
+        key: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: amountPaise,
+        currency,
+        name: 'Fractional Land SPV',
+        description: `${project.projectName} Investment`,
+        image: '/favicon.ico',
+        order_id: orderId,
+        prefill: {
+          name: user?.displayName || `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+          email: user?.email || '',
+          contact: user?.phone || '',
+        },
+        theme: { color: '#4f46e5' },
+        handler: async function (response) {
+          try {
+            const verifyRes = await fetch(`${API_BASE}/payments/verify`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                projectId: project._id,
+                amountInINR: amount,
+              })
+            });
+            const verifyJson = await verifyRes.json();
+            if (!verifyJson.success) throw new Error(verifyJson.error || 'Verification failed');
+            toast.success('Payment successful!');
+            await loadProject();
+          } catch (e) {
+            toast.error('Payment verification failed. Please contact support.');
+          }
+        },
+        modal: { ondismiss: function () {} },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (e) {
+      toast.error(e.message || 'Payment initialization failed');
     }
   };
 
@@ -123,6 +188,25 @@ export default function ProjectDetail() {
               alt={project.projectName}
               className="w-full h-full object-cover"
             />
+          </div>
+        )}
+
+        {/* Gallery */}
+        {Array.isArray(project.media?.images) && project.media.images.length > 0 && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-3">Gallery</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {project.media.images.map((src, idx) => (
+                <div key={idx} className="relative w-full pt-[75%] bg-gray-100 rounded-lg overflow-hidden">
+                  <img
+                    src={src}
+                    alt={`${project.projectName} image ${idx + 1}`}
+                    className="absolute inset-0 w-full h-full object-cover hover:scale-105 transition-transform"
+                    loading="lazy"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -261,13 +345,13 @@ export default function ProjectDetail() {
                 <div className="mb-6">
                   <div className="flex justify-between text-sm mb-2">
                     <span>Fundraising Progress</span>
-                    <span>0%</span>
+                    <span>{pct}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div className="bg-primary-600 h-3 rounded-full" style={{ width: '0%' }}></div>
+                    <div className="bg-primary-600 h-3 rounded-full" style={{ width: `${pct}%` }}></div>
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    ₹0 raised of ₹{(project.financials.targetRaise / 10000000).toFixed(2)}Cr
+                    ₹{raised.toLocaleString()} raised of ₹{target.toLocaleString()}
                   </p>
                 </div>
 
@@ -313,10 +397,17 @@ export default function ProjectDetail() {
                 className="input"
                 placeholder={`Min: ₹${project.financials.minimumInvestment.toLocaleString()}`}
                 min={project.financials.minimumInvestment}
+                max={500000}
+                step={1000}
               />
               <p className="text-sm text-gray-500 mt-1">
-                Minimum: ₹{project.financials.minimumInvestment.toLocaleString()}
+                Minimum: ₹{project.financials.minimumInvestment.toLocaleString()} • Max per payment: ₹5,00,000
               </p>
+            </div>
+
+            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg mb-4 text-sm">
+              <p className="text-yellow-900 font-medium">Gateway limit</p>
+              <p className="text-yellow-900">Max per payment is ₹5,00,000. For larger amounts, split into multiple payments (e.g., ₹5,00,000 + remainder).</p>
             </div>
 
             <div className="bg-blue-50 p-3 rounded-lg mb-4 text-sm">

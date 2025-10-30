@@ -6,21 +6,57 @@ import { FaMapMarkerAlt, FaRupeeSign, FaCalendar, FaChartLine } from 'react-icon
 
 export default function Projects() {
   const [projects, setProjects] = useState([]);
+  const [filteredProjects, setFilteredProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    landType: 'all',
+    city: 'all'
+  });
 
   useEffect(() => {
     loadProjects();
   }, []);
 
+  useEffect(() => {
+    applyFilters();
+  }, [filters, projects]);
+
   const loadProjects = async () => {
     try {
+      // Get all public projects (listed + fundraising + approved)
       const response = await projectAPI.getListedProjects();
-      setProjects(response.data.projects);
+      const allProjects = response.data.projects || [];
+      setProjects(allProjects);
+      setFilteredProjects(allProjects);
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...projects];
+
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(p => p.status === filters.status);
+    }
+
+    if (filters.landType !== 'all') {
+      filtered = filtered.filter(p => p.landDetails?.landType === filters.landType);
+    }
+
+    if (filters.city !== 'all') {
+      filtered = filtered.filter(p => p.landDetails?.location?.city === filters.city);
+    }
+
+    setFilteredProjects(filtered);
+  };
+
+  const getUniqueCities = () => {
+    const cities = projects.map(p => p.landDetails?.location?.city).filter(Boolean);
+    return [...new Set(cities)].sort();
   };
 
   return (
@@ -52,13 +88,87 @@ export default function Projects() {
             <p className="text-gray-600">Browse available land investment opportunities</p>
           </div>
 
+          {/* Filters */}
+          {!loading && projects.length > 0 && (
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
+              <div className="grid md:grid-cols-3 gap-4">
+                {/* Status Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="listed">Listed</option>
+                    <option value="fundraising">Fundraising</option>
+                    <option value="approved">Approved</option>
+                  </select>
+                </div>
+
+                {/* Land Type Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Land Type
+                  </label>
+                  <select
+                    value={filters.landType}
+                    onChange={(e) => setFilters({ ...filters, landType: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="residential">Residential</option>
+                    <option value="agricultural">Agricultural</option>
+                    <option value="industrial">Industrial</option>
+                    <option value="mixed_use">Mixed Use</option>
+                  </select>
+                </div>
+
+                {/* City Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    City
+                  </label>
+                  <select
+                    value={filters.city}
+                    onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="all">All Cities</option>
+                    {getUniqueCities().map(city => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  Showing {filteredProjects.length} of {projects.length} projects
+                </p>
+                {(filters.status !== 'all' || filters.landType !== 'all' || filters.city !== 'all') && (
+                  <button
+                    onClick={() => setFilters({ status: 'all', landType: 'all', city: 'all' })}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <Link key={project._id} href={`/projects/${project._id}`}>
                   <div className="card hover:shadow-lg transition-shadow cursor-pointer">
                     {project.media?.coverImage && (
@@ -144,6 +254,19 @@ export default function Projects() {
             <div className="text-center py-12">
               <p className="text-gray-500 text-lg">No projects available at the moment</p>
               <p className="text-gray-400 mt-2">Check back soon for new investment opportunities</p>
+            </div>
+          )}
+
+          {!loading && projects.length > 0 && filteredProjects.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg">No projects match your filters</p>
+              <p className="text-gray-400 mt-2">Try adjusting your filters to see more projects</p>
+              <button
+                onClick={() => setFilters({ status: 'all', landType: 'all', city: 'all' })}
+                className="mt-4 btn-primary"
+              >
+                Clear All Filters
+              </button>
             </div>
           )}
         </div>

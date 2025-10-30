@@ -65,27 +65,37 @@ This platform enables investors to participate in land investments through legal
 ```
 CoSpaces/
 ├── packages/
-│   ├── backend/                 # Node.js API server
+│   ├── backend/                 # Node.js API server (Port 5000)
 │   │   ├── src/
 │   │   │   ├── config/         # Database & app configuration
 │   │   │   ├── controllers/    # Request handlers
 │   │   │   ├── models/         # MongoDB models
 │   │   │   ├── routes/         # API routes
 │   │   │   ├── middleware/     # Auth, validation, error handling
+│   │   │   ├── services/       # Business logic & integrations
 │   │   │   ├── utils/          # Helper functions
 │   │   │   └── server.js       # App entry point
+│   │   ├── scripts/           # Database seeds & utilities
 │   │   ├── .env.example
 │   │   └── package.json
 │   │
-│   └── frontend/               # Next.js web app
-│       ├── components/         # React components
-│       ├── lib/               # API client & utilities
-│       ├── pages/             # Next.js pages
-│       ├── styles/            # Global CSS
+│   ├── frontend/               # User Dashboard - Next.js (Port 3000)
+│   │   ├── components/         # React components
+│   │   ├── lib/               # API client & utilities
+│   │   ├── pages/             # Next.js pages
+│   │   ├── styles/            # Global CSS
+│   │   └── package.json
+│   │
+│   └── admin-frontend/         # Admin Console - Next.js (Port 3001)
+│       ├── components/         # Admin UI components
+│       ├── lib/               # Admin API client & auth
+│       ├── pages/             # Admin dashboard pages
+│       ├── styles/            # Admin styling
 │       └── package.json
 │
-├── package.json               # Workspace root
+├── package.json               # Workspace root with dev scripts
 ├── README.md
+├── DEV_COMMANDS.md            # Quick reference for all commands
 ├── DEPLOYMENT.md
 └── docker-compose.yml
 ```
@@ -133,24 +143,36 @@ CoSpaces/
 
 5. **Start development servers**
 
-   Option 1 - Run both together:
+   Option 1 - Run all servers together (Recommended):
    ```bash
    npm run dev
    ```
+   This starts backend, frontend, and admin console with color-coded output!
 
-   Option 2 - Run separately:
+   Option 2 - Run servers separately:
    ```bash
    # Terminal 1 - Backend
    npm run dev:backend
 
    # Terminal 2 - Frontend
    npm run dev:frontend
+
+   # Terminal 3 - Admin Console
+   npm run dev:admin
    ```
 
 6. **Access the application**
-   - Frontend: http://localhost:3000
+   - User Frontend: http://localhost:3000
+   - Admin Console: http://localhost:3001
    - Backend API: http://localhost:5000
    - API Health Check: http://localhost:5000/health
+
+   **Default Admin Credentials:**
+   - Email: `official.pandeyarun0600@gmail.com`
+   - Password: `Admin@12345`
+   - Or use Google OAuth with the same email
+
+   See [DEV_COMMANDS.md](./DEV_COMMANDS.md) for all available commands.
 
 ## 📚 API Documentation
 

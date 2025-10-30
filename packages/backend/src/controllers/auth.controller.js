@@ -858,13 +858,39 @@ exports.googleCallback = async (req, res) => {
       }
     });
 
+    // Determine redirect URL based on state parameter
+    let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+    try {
+      if (req.query.state) {
+        const state = JSON.parse(decodeURIComponent(req.query.state));
+        if (state.isAdmin && state.redirectUrl) {
+          redirectURL = state.redirectUrl;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to parse OAuth state parameter:', error);
+    }
+
     // Redirect to frontend with token
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendURL}/auth/callback?token=${token}&refreshToken=${refreshToken}`);
+    res.redirect(`${redirectURL}/auth/callback?token=${token}&refreshToken=${refreshToken}`);
   } catch (error) {
     logger.error('Google OAuth callback error:', error);
-    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendURL}/login?error=oauth_failed`);
+    
+    // Determine error redirect URL
+    let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    try {
+      if (req.query.state) {
+        const state = JSON.parse(decodeURIComponent(req.query.state));
+        if (state.isAdmin && state.redirectUrl) {
+          redirectURL = state.redirectUrl;
+        }
+      }
+    } catch (err) {
+      // Use default URL
+    }
+    
+    res.redirect(`${redirectURL}/login?error=oauth_failed`);
   }
 };
 
