@@ -6,7 +6,12 @@ const { authenticate, authorize } = require('../middleware/auth');
 // User profile routes
 router.get('/profile', authenticate, userController.getProfile);
 router.put('/profile', authenticate, userController.updateProfile);
+router.put('/phone', authenticate, userController.updatePhone);
 router.put('/bank-details', authenticate, userController.updateBankDetails);
+
+// Onboarding routes
+router.put('/onboarding/step1', authenticate, userController.updateOnboardingStep1);
+router.put('/onboarding/step2', authenticate, userController.updateOnboardingStep2);
 
 // Admin routes
 router.get('/', authenticate, authorize('admin', 'compliance_officer'), userController.getAllUsers);

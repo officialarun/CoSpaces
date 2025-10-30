@@ -339,7 +339,7 @@ const spvSchema = new mongoose.Schema({
 });
 
 // Indexes
-spvSchema.index({ spvCode: 1 });
+// Note: spvCode has unique: true in field definition
 spvSchema.index({ status: 1 });
 spvSchema.index({ project: 1 });
 spvSchema.index({ 'registrationDetails.cin': 1 });

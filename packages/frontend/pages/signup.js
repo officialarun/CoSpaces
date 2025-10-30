@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { FaLandmark } from 'react-icons/fa';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function Signup() {
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
@@ -17,9 +18,11 @@ export default function Signup() {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      await signup(data);
+      const result = await signup(data);
       toast.success('Account created successfully!');
-      router.push('/kyc/onboarding');
+      
+      // All new users start onboarding from step 1
+      router.push('/onboarding/step1');
     } catch (error) {
       toast.error(error.error || 'Signup failed');
     } finally {
@@ -46,6 +49,19 @@ export default function Signup() {
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+            <div className="mb-6">
+              <GoogleLoginButton />
+              
+              <div className="mt-6 relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">Or sign up with email</span>
+                </div>
+              </div>
+            </div>
+
             <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

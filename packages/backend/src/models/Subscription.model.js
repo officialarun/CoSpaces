@@ -238,7 +238,7 @@ const subscriptionSchema = new mongoose.Schema({
 // Compound indexes
 subscriptionSchema.index({ investor: 1, spv: 1 });
 subscriptionSchema.index({ spv: 1, status: 1 });
-subscriptionSchema.index({ subscriptionNumber: 1 });
+// Note: subscriptionNumber has unique: true in field definition
 subscriptionSchema.index({ 'payment.transactionId': 1 });
 subscriptionSchema.index({ 'payment.utr': 1 });
 subscriptionSchema.index({ createdAt: -1 });

@@ -833,3 +833,38 @@ exports.resendVerification = async (req, res, next) => {
   }
 };
 
+// Google OAuth callback
+exports.googleCallback = async (req, res) => {
+  try {
+    // User is authenticated via passport
+    const user = req.user;
+
+    // Generate JWT token
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // Log audit event
+    await AuditLog.logEvent({
+      eventType: 'user_login',
+      eventCategory: 'authentication',
+      severity: 'info',
+      performedBy: user._id,
+      performedByEmail: user.email,
+      performedByRole: user.role,
+      action: 'User logged in via Google OAuth',
+      request: {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      }
+    });
+
+    // Redirect to frontend with token
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendURL}/auth/callback?token=${token}&refreshToken=${refreshToken}`);
+  } catch (error) {
+    logger.error('Google OAuth callback error:', error);
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendURL}/login?error=oauth_failed`);
+  }
+};
+

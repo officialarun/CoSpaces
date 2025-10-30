@@ -245,7 +245,7 @@ const distributionSchema = new mongoose.Schema({
 
 // Indexes
 distributionSchema.index({ spv: 1, createdAt: -1 });
-distributionSchema.index({ distributionNumber: 1 });
+// Note: distributionNumber has unique: true in field definition
 distributionSchema.index({ status: 1 });
 distributionSchema.index({ 'investorDistributions.investor': 1 });
 distributionSchema.index({ paymentDate: 1 });

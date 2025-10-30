@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       setUser(response.data.user);
-      return { success: true };
+      return { success: true, user: response.data.user };
     } catch (error) {
       throw error;
     }
@@ -51,10 +51,18 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       setUser(response.data.user);
-      return { success: true };
+      return { success: true, user: response.data.user };
     } catch (error) {
       throw error;
     }
+  };
+
+  const setTokens = (token, refreshToken) => {
+    localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
+    loadUser(); // Load user data after setting tokens
   };
 
   const logout = async () => {
@@ -90,6 +98,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         hasRole,
         loadUser,
+        setTokens,
       }}
     >
       {children}
@@ -99,7 +108,7 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => useContext(AuthContext);
 
-export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
+export const ProtectedRoute = ({ children, allowedRoles = [], requireOnboarding = true }) => {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -107,12 +116,31 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     if (!loading && !user) {
       router.push('/login');
     }
-    if (!loading && user && allowedRoles.length > 0) {
-      if (!allowedRoles.includes(user.role)) {
-        router.push('/unauthorized');
+    
+    if (!loading && user) {
+      // Check onboarding status
+      if (requireOnboarding && !user.onboardingCompleted) {
+        const onboardingStep = user.onboardingStep || 0;
+        const currentPath = router.pathname;
+        
+        // Don't redirect if already on onboarding pages
+        if (!currentPath.startsWith('/onboarding')) {
+          if (onboardingStep === 0) {
+            router.push('/onboarding/step1');
+          } else if (onboardingStep === 1) {
+            router.push('/onboarding/step2');
+          }
+        }
+      }
+      
+      // Check role permissions
+      if (allowedRoles.length > 0) {
+        if (!allowedRoles.includes(user.role)) {
+          router.push('/unauthorized');
+        }
       }
     }
-  }, [user, loading, router, allowedRoles]);
+  }, [user, loading, router, allowedRoles, requireOnboarding]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">

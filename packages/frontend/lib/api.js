@@ -54,7 +54,28 @@ export const authAPI = {
 export const userAPI = {
   getProfile: () => api.get('/users/profile'),
   updateProfile: (data) => api.put('/users/profile', data),
+  updatePhone: (phone) => api.put('/users/phone', { phone }),
   updateBankDetails: (data) => api.put('/users/bank-details', data),
+  updateOnboardingStep1: (data) => api.put('/users/onboarding/step1', data),
+  updateOnboardingStep2: (data) => api.put('/users/onboarding/step2', data),
+};
+
+// DIDIT APIs
+export const diditAPI = {
+  verifyDocument: (documentFile, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('document', documentFile);
+    if (metadata) {
+      formData.append('metadata', JSON.stringify(metadata));
+    }
+    
+    return api.post('/didit/verify-document', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  getVerificationStatus: () => api.get('/didit/status'),
 };
 
 // KYC APIs

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const passport = require('passport');
 const authController = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth');
 
@@ -23,6 +24,18 @@ router.post('/mfa/setup', authenticate, authController.setupMFA);
 router.post('/mfa/verify', authenticate, authController.verifyMFA);
 router.post('/mfa/disable', authenticate, authController.disableMFA);
 router.post('/mfa/verify-login', authController.verifyMFALogin);
+
+// Google OAuth routes
+router.get(
+  '/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  authController.googleCallback
+);
 
 module.exports = router;
 

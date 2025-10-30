@@ -325,7 +325,7 @@ const projectSchema = new mongoose.Schema({
 });
 
 // Indexes
-projectSchema.index({ projectCode: 1 });
+// Note: projectCode has unique: true in field definition
 projectSchema.index({ status: 1 });
 projectSchema.index({ 'landDetails.location.city': 1 });
 projectSchema.index({ 'landDetails.location.state': 1 });

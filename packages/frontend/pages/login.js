@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { FaLandmark } from 'react-icons/fa';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function Login() {
   const { register, handleSubmit, formState: { errors } } = useForm();
@@ -26,7 +27,19 @@ export default function Login() {
         toast.success('Enter MFA code');
       } else {
         toast.success('Login successful!');
-        router.push('/dashboard');
+        
+        // Redirect based on onboarding status
+        const user = result.user;
+        if (!user.onboardingCompleted) {
+          const onboardingStep = user.onboardingStep || 0;
+          if (onboardingStep === 0) {
+            router.push('/onboarding/step1');
+          } else if (onboardingStep === 1) {
+            router.push('/onboarding/step2');
+          }
+        } else {
+          router.push('/dashboard');
+        }
       }
     } catch (error) {
       toast.error(error.error || 'Login failed');
@@ -101,6 +114,21 @@ export default function Login() {
                 {loading ? 'Signing in...' : 'Sign in'}
               </button>
             </form>
+
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">Or continue with</span>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <GoogleLoginButton />
+              </div>
+            </div>
 
             <div className="mt-6">
               <div className="text-sm text-center">
