@@ -157,6 +157,7 @@ export default function ProjectsTab() {
                   <th>Code</th>
                   <th>Location</th>
                   <th>Status</th>
+                  <th>SPV</th>
                   <th>Published</th>
                   <th>Raised / Target</th>
                 </tr>
@@ -170,6 +171,15 @@ export default function ProjectsTab() {
                       {project.landDetails?.location?.city}, {project.landDetails?.location?.state}
                     </td>
                     <td>{getStatusBadge(project.status)}</td>
+                    <td>
+                      {project.spv ? (
+                        <span className="text-sm font-medium text-primary-600">
+                          {project.spv?.spvName || project.spv?.name || 'SPV Assigned'}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
                     <td>
                       {project.isPublic ? (
                         <span className="badge badge-success">Published</span>

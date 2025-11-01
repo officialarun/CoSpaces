@@ -343,9 +343,20 @@ exports.getAllProjects = async (req, res, next) => {
 
     const projects = await Project.find(query)
       .populate('assetManager', 'profile.firstName profile.lastName email')
+      .populate('spv', 'spvName spvCode')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
+
+    // Fix any projects that have SPV but wrong status (data consistency)
+    for (const project of projects) {
+      if (project.spv && project.status !== 'approved' && project.status !== 'acquired') {
+        const oldStatus = project.status;
+        project.status = 'approved';
+        await project.save();
+        logger.info(`Fixed project ${project.projectCode}: has SPV but status was ${oldStatus}, updated to approved`);
+      }
+    }
 
     const count = await Project.countDocuments(query);
 
@@ -396,25 +407,38 @@ exports.getAllProjects = async (req, res, next) => {
 exports.recalculateFundingStatus = async (req, res, next) => {
   try {
     const Subscription = require('../models/Subscription.model');
-    const candidateStatuses = ['fundraising', 'listed', 'approved'];
+    const Payment = require('../models/Payment.model');
+    // Include 'under_acquisition' so projects can be moved from funded to under_acquisition
+    const candidateStatuses = ['fundraising', 'listed', 'approved', 'under_acquisition'];
     const projects = await Project.find({ status: { $in: candidateStatuses } });
     let updated = 0;
 
     for (const project of projects) {
-      const agg = await Subscription.aggregate([
-        { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-        { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } }, totalCommitted: { $sum: { $ifNull: ['$committedAmount', 0] } } } }
+      // Aggregate from both Subscriptions and Payments
+      const [subAgg, payAgg] = await Promise.all([
+        Subscription.aggregate([
+          { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
+          { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
+        ]),
+        Payment.aggregate([
+          { $match: { project: project._id, status: 'captured' } },
+          { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
+        ])
       ]);
 
-      const total = agg?.[0]?.totalPaid || 0; // prefer paidAmount; adjust if needed
+      const subscriptionTotal = subAgg?.[0]?.totalPaid || 0;
+      const paymentTotal = payAgg?.[0]?.total || 0;
+      const totalRaised = subscriptionTotal + paymentTotal;
       const target = project.financials?.targetRaise || 0;
 
-      if (total >= target && target > 0) {
-        project.status = 'funded';
+      if (totalRaised >= target && target > 0) {
+        // Move to 'under_acquisition' when funding is complete
+        project.status = 'under_acquisition';
         project.timeline = project.timeline || {};
         project.timeline.fundraisingEndDate = new Date();
         await project.save();
         updated++;
+        logger.info(`Project ${project.projectCode} marked as under_acquisition. Raised: ${totalRaised}, Target: ${target}`);
       }
     }
 
@@ -766,11 +790,15 @@ exports.getAllSPVs = async (req, res, next) => {
     if (trust) query.trust = trust;
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { registrationNumber: { $regex: search, $options: 'i' } },
+        { spvName: { $regex: search, $options: 'i' } },
+        { spvCode: { $regex: search, $options: 'i' } },
+        { 'registrationDetails.cin': { $regex: search, $options: 'i' } },
       ];
     }
-    const spvs = await SPV.find(query).populate('trust');
+    const spvs = await SPV.find(query).populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     res.json({ success: true, data: { spvs } });
   } catch (error) {
     logger.error('Error fetching SPVs:', error);
@@ -786,8 +814,50 @@ exports.createSPV = async (req, res, next) => {
     const trust = await Trust.findById(req.body.trust);
     if (!trust) return res.status(400).json({ success: false, error: 'Invalid trust' });
 
-    const spv = await SPV.create({ ...req.body });
+    // Map form fields to model fields and set defaults
+    const spvData = {
+      // Map 'name' to 'spvName'
+      spvName: req.body.name || req.body.spvName,
+      // Generate spvCode if not provided
+      spvCode: req.body.spvCode || `SPV-${Date.now()}`,
+      // Map trust
+      trust: req.body.trust,
+      // Set registration number if provided
+      ...(req.body.registrationNumber && {
+        'registrationDetails.cin': req.body.registrationNumber
+      }),
+      // Set required fields with defaults
+      shareStructure: {
+        authorizedCapital: req.body.shareStructure?.authorizedCapital || req.body.authorizedCapital || 1000000, // Default 10L
+        ...(req.body.shareStructure || {})
+      },
+      fundraising: {
+        targetAmount: req.body.fundraising?.targetAmount || req.body.targetAmount || 1000000, // Default 10L
+        minimumInvestment: req.body.fundraising?.minimumInvestment || req.body.minimumInvestment || 50000, // Default 50K
+        ...(req.body.fundraising || {})
+      },
+      // Set createdBy
+      createdBy: req.user._id,
+      // Project is optional - will be assigned later via Assign SPV
+      ...(req.body.project && { project: req.body.project }),
+      // Set entity type if provided
+      ...(req.body.entityType && { entityType: req.body.entityType }),
+      // Include any other fields from req.body (but don't override what we've set)
+      ...Object.keys(req.body).reduce((acc, key) => {
+        if (!['name', 'spvCode', 'trust', 'registrationNumber', 'authorizedCapital', 'targetAmount', 'minimumInvestment'].includes(key)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
+    };
+
+    const spv = await SPV.create(spvData);
     await AuditLog.logEvent({ eventType: 'spv_created', eventCategory: 'spv', performedBy: req.user._id, targetEntity: { entityType: 'spv', entityId: spv._id }, action: 'SPV created by admin' });
+    // Populate trust before returning
+    await spv.populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     res.status(201).json({ success: true, data: { spv } });
   } catch (error) {
     logger.error('Error creating SPV:', error);
@@ -798,8 +868,34 @@ exports.createSPV = async (req, res, next) => {
 exports.updateSPV = async (req, res, next) => {
   try {
     const SPV = require('../models/SPV.model');
-    const spv = await SPV.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    // Map form fields to model fields (same as createSPV)
+    const updateData = {
+      // Map 'name' to 'spvName'
+      ...(req.body.name !== undefined && { spvName: req.body.name }),
+      // Map registrationNumber to registrationDetails.cin
+      ...(req.body.registrationNumber !== undefined && {
+        'registrationDetails.cin': req.body.registrationNumber
+      }),
+      // Include other fields that match the model directly
+      ...Object.keys(req.body).reduce((acc, key) => {
+        if (!['name', 'registrationNumber'].includes(key)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
+    };
+    
+    const spv = await SPV.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
     if (!spv) return res.status(404).json({ success: false, error: 'SPV not found' });
+    // Populate trust before returning
+    await spv.populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     await AuditLog.logEvent({ eventType: 'spv_updated', eventCategory: 'spv', performedBy: req.user._id, targetEntity: { entityType: 'spv', entityId: spv._id }, action: 'SPV updated by admin' });
     res.json({ success: true, data: { spv } });
   } catch (error) {
@@ -838,13 +934,34 @@ exports.assignSPVToProject = async (req, res, next) => {
     const spv = await SPV.findById(spvId).populate('trust');
     if (!spv) return res.status(400).json({ success: false, error: 'Invalid SPV' });
 
+    // Check if SPV is already assigned to another project
+    if (spv.project && String(spv.project) !== String(projectId)) {
+      return res.status(409).json({ success: false, error: 'SPV is already assigned to another project' });
+    }
+
+    // Update project with SPV
     project.spv = spv._id;
-    // Optional: transition status after assignment
-    if (['funded', 'fundraising', 'approved', 'listed'].includes(project.status)) {
+    // When SPV is assigned, move project from 'under_acquisition' to 'approved'
+    // Also handle any existing projects that might have wrong status
+    if (project.status === 'under_acquisition' || (project.spv && project.status !== 'approved')) {
+      project.status = 'approved';
+      project.timeline = project.timeline || {};
+      project.timeline.expectedAcquisitionDate = project.timeline.expectedAcquisitionDate || new Date();
+    } else if (['funded', 'fundraising', 'listed'].includes(project.status)) {
+      // For other statuses, move to 'under_acquisition' first
       project.status = 'under_acquisition';
+      project.timeline = project.timeline || {};
       project.timeline.expectedAcquisitionDate = project.timeline.expectedAcquisitionDate || new Date();
     }
     await project.save();
+
+    // Update SPV with project (bidirectional link)
+    spv.project = project._id;
+    await spv.save();
+
+    // Populate project fields before returning
+    await project.populate('spv');
+    await project.populate('assetManager', 'firstName lastName email');
 
     await AuditLog.logEvent({
       eventType: 'spv_assigned_to_project',

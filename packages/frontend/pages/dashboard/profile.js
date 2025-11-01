@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { ProtectedRoute, useAuth } from '../../lib/auth';
@@ -11,15 +11,37 @@ import VerificationBadge from '../../components/VerificationBadge';
 
 function ProfilePage() {
   const { user, loadUser } = useAuth();
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm({
     defaultValues: {
-      firstName: user?.firstName,
-      lastName: user?.lastName,
-      phone: user?.phone,
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      phone: user?.phone || '',
     }
   });
   const [loading, setLoading] = useState(false);
   const [phoneEdit, setPhoneEdit] = useState(false);
+
+  // Reset form when user data changes
+  useEffect(() => {
+    if (user) {
+      reset({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        phone: user.phone || '',
+      });
+    }
+  }, [user, reset]);
+
+  // Reset phone field when entering edit mode
+  useEffect(() => {
+    if (phoneEdit && user) {
+      reset({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        phone: user.phone || '',
+      }, { keepDefaultValues: false });
+    }
+  }, [phoneEdit, user, reset]);
 
   // Helper function to calculate age from DOB
   const calculateAge = (dob) => {
@@ -129,12 +151,18 @@ function ProfilePage() {
   const onSubmitPhone = async (data) => {
     setLoading(true);
     try {
-      await userAPI.updatePhone(data.phone);
+      const phone = data.phone?.trim();
+      if (!phone || phone.length === 0) {
+        toast.error('Phone number cannot be empty');
+        setLoading(false);
+        return;
+      }
+      await userAPI.updatePhone(phone);
       await loadUser();
       toast.success('Phone number updated!');
       setPhoneEdit(false);
     } catch (error) {
-      toast.error(error.error || 'Failed to update phone');
+      toast.error(error.error || error.details || 'Failed to update phone');
     } finally {
       setLoading(false);
     }
@@ -266,7 +294,16 @@ function ProfilePage() {
                     {phoneEdit ? (
                       <form onSubmit={handleSubmit(onSubmitPhone)} className="flex gap-2 mt-1">
                         <input
-                          {...register('phone', { required: 'Phone is required' })}
+                          {...register('phone', { 
+                            required: 'Phone is required',
+                            validate: (value) => {
+                              const trimmed = value?.trim();
+                              if (!trimmed || trimmed.length === 0) {
+                                return 'Phone number cannot be empty';
+                              }
+                              return true;
+                            }
+                          })}
                           type="tel"
                           className="input"
                           placeholder="+91 9876543210"

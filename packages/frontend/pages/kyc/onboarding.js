@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import { kycAPI, userAPI } from '../../lib/api';
 
 function KYCOnboarding() {
-  const { user } = useAuth();
+  const { user, loadUser } = useAuth();
   const router = useRouter();
   const { register, handleSubmit, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
@@ -36,6 +36,8 @@ function KYCOnboarding() {
       };
 
       await kycAPI.submitKYC(kycData);
+      // Refresh user data to update KYC status
+      await loadUser();
       toast.success('KYC submitted successfully! Our team will review it.');
       router.push('/kyc/status');
     } catch (error) {

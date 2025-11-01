@@ -105,6 +105,7 @@ export default function Projects() {
                     <option value="all">All Status</option>
                     <option value="listed">Listed</option>
                     <option value="fundraising">Fundraising</option>
+                    <option value="under_acquisition">Under Acquisition</option>
                     <option value="approved">Approved</option>
                   </select>
                 </div>
@@ -221,16 +222,32 @@ export default function Projects() {
                       </div>
 
                       <div className="pt-3">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-primary-600 h-2 rounded-full"
-                            style={{ width: '0%' }}
-                          ></div>
-                        </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
-                          <span>Fundraising Open</span>
-                          <span>₹{(project.financials.targetRaise / 10000000).toFixed(2)}Cr Target</span>
-                        </div>
+                        {(() => {
+                          const raised = project.funding?.raisedPaid || 0;
+                          const target = project.financials?.targetRaise || 1;
+                          const pct = target > 0 ? Math.min(100, Math.floor((raised / target) * 100)) : 0;
+                          const isComplete = raised >= target && target > 0;
+                          
+                          return (
+                            <>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${isComplete ? 'bg-green-600' : 'bg-primary-600'}`}
+                                  style={{ width: `${pct}%` }}
+                                ></div>
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>{isComplete ? 'Funding Complete' : 'Fundraising Open'}</span>
+                                <span>₹{(target / 10000000).toFixed(2)}Cr Target</span>
+                              </div>
+                              {pct > 0 && (
+                                <div className="text-xs text-gray-600 mt-1 text-center">
+                                  ₹{(raised / 10000000).toFixed(2)}Cr raised ({pct}%)
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="pt-3">

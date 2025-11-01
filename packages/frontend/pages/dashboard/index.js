@@ -7,13 +7,15 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { FaChartLine, FaWallet, FaFileInvoiceDollar, FaLandmark, FaShieldAlt } from 'react-icons/fa';
 
 function DashboardHome() {
-  const { user } = useAuth();
+  const { user, loadUser } = useAuth();
   const [portfolio, setPortfolio] = useState(null);
   const [subscriptions, setSubscriptions] = useState([]);
   const [distributions, setDistributions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Refresh user data on mount to ensure KYC status is up to date
+    loadUser();
     loadDashboardData();
   }, []);
 
@@ -100,20 +102,66 @@ function DashboardHome() {
           )}
 
           {/* KYC Status Banner */}
-          {user.kycStatus !== 'approved' && (
-            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
-              <div className="flex">
-                <div className="flex-1">
-                  <p className="text-sm text-yellow-700">
-                    Your KYC is {user.kycStatus}. Complete your KYC to start investing.
-                  </p>
+          {user.kycStatus !== 'approved' && (() => {
+            const getBannerConfig = () => {
+              const status = user.kycStatus || 'pending';
+              
+              if (status === 'pending' || !status) {
+                return {
+                  message: 'Complete your KYC verification to start investing in projects.',
+                  buttonText: 'Complete KYC',
+                  href: '/kyc/onboarding',
+                  bgColor: 'bg-yellow-50',
+                  borderColor: 'border-yellow-400',
+                  textColor: 'text-yellow-700'
+                };
+              } else if (status === 'submitted' || status === 'under_review') {
+                return {
+                  message: `Your KYC is ${status.replace('_', ' ')}. Our team is reviewing your documents.`,
+                  buttonText: 'View KYC Status',
+                  href: '/kyc/status',
+                  bgColor: 'bg-blue-50',
+                  borderColor: 'border-blue-400',
+                  textColor: 'text-blue-700'
+                };
+              } else if (status === 'rejected') {
+                return {
+                  message: 'Your KYC was rejected. Please resubmit with correct information.',
+                  buttonText: 'Resubmit KYC',
+                  href: '/kyc/onboarding',
+                  bgColor: 'bg-red-50',
+                  borderColor: 'border-red-400',
+                  textColor: 'text-red-700'
+                };
+              }
+              
+              return {
+                message: `Your KYC status is ${status}. Complete your KYC to start investing.`,
+                buttonText: 'Complete KYC',
+                href: '/kyc/onboarding',
+                bgColor: 'bg-yellow-50',
+                borderColor: 'border-yellow-400',
+                textColor: 'text-yellow-700'
+              };
+            };
+            
+            const config = getBannerConfig();
+            
+            return (
+              <div className={`${config.bgColor} border-l-4 ${config.borderColor} p-4`}>
+                <div className="flex">
+                  <div className="flex-1">
+                    <p className={`text-sm ${config.textColor}`}>
+                      {config.message}
+                    </p>
+                  </div>
+                  <Link href={config.href} className="btn-primary text-sm">
+                    {config.buttonText}
+                  </Link>
                 </div>
-                <Link href="/kyc/onboarding" className="btn-primary text-sm">
-                  Complete KYC
-                </Link>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

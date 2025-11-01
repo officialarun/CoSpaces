@@ -34,7 +34,7 @@ export default function SPVsTab() {
   };
 
   const openCreate = () => { setEditing(null); setForm({ name: '', registrationNumber: '', trust: trusts[0]?._id || '' }); setModalOpen(true); };
-  const openEdit = (s) => { setEditing(s); setForm({ name: s.name||'', registrationNumber: s.registrationNumber||'', trust: s.trust?._id || '' }); setModalOpen(true); };
+  const openEdit = (s) => { setEditing(s); setForm({ name: s.spvName || s.name||'', registrationNumber: s.registrationDetails?.cin || s.registrationNumber||'', trust: s.trust?._id || s.trust || '' }); setModalOpen(true); };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -69,9 +69,9 @@ export default function SPVsTab() {
             <tbody>
               {loading ? <tr><td colSpan={5} className="p-6 text-center">Loading...</td></tr> : spvs.length===0 ? <tr><td colSpan={5} className="p-6 text-center">No SPVs</td></tr> : spvs.map(s => (
                 <tr key={s._id}>
-                  <td>{s.name}</td>
-                  <td>{s.registrationNumber||'-'}</td>
-                  <td>{s.trust?.name || '-'}</td>
+                  <td>{s.spvName || s.name}</td>
+                  <td>{s.registrationDetails?.cin || s.registrationNumber || '-'}</td>
+                  <td>{s.trust && typeof s.trust === 'object' ? (s.trust.name || '-') : (s.trust ? 'Loading...' : '-')}</td>
                   <td>{new Date(s.createdAt).toLocaleDateString()}</td>
                   <td>
                     <div className="flex justify-end gap-2">
@@ -123,11 +123,11 @@ export default function SPVsTab() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold mb-2">Delete SPV</h3>
             <p className="text-sm text-gray-700 mb-3">Type the SPV name to confirm:</p>
-            <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm mb-4 select-all">{confirmSPV?.name}</div>
+            <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm mb-4 select-all">{confirmSPV?.spvName || confirmSPV?.name}</div>
             <input className="input mb-4" value={confirmText} onChange={(e)=>setConfirmText(e.target.value)} placeholder="Type SPV name" />
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={()=>setConfirmOpen(false)}>Cancel</button>
-              <button className="btn-danger" disabled={confirmText !== confirmSPV?.name} onClick={onDelete}>Delete</button>
+              <button className="btn-danger" disabled={confirmText !== (confirmSPV?.spvName || confirmSPV?.name)} onClick={onDelete}>Delete</button>
             </div>
           </div>
         </div>

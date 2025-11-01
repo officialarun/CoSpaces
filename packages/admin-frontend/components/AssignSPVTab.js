@@ -89,15 +89,49 @@ export default function AssignSPVTab() {
               <div>
                 <label className="block text-sm font-medium mb-1">Select SPV</label>
                 <select className="input" value={selectedSPV} onChange={(e)=>setSelectedSPV(e.target.value)}>
-                  <option value="">Select</option>
-                  {trusts.map(t => (
-                    <optgroup key={t._id} label={`Trust: ${t.name}`}>
-                      {spvs.filter(s=>s.trust?._id===t._id).map(s => (
-                        <option key={s._id} value={s._id}>{s.name} {s.registrationNumber?`(${s.registrationNumber})`:''}</option>
-                      ))}
-                    </optgroup>
-                  ))}
+                  <option value="">Select SPV</option>
+                  {spvs.length === 0 ? (
+                    <option disabled>No SPVs available</option>
+                  ) : (
+                    <>
+                      {trusts.map(t => {
+                        const trustSPVs = spvs.filter(s => {
+                          // Handle both populated trust object and trust ObjectId
+                          const sTrustId = s.trust?._id || s.trust;
+                          return sTrustId && String(sTrustId) === String(t._id);
+                        });
+                        return trustSPVs.length > 0 ? (
+                          <optgroup key={t._id} label={`Trust: ${t.name}`}>
+                            {trustSPVs.map(s => (
+                              <option key={s._id} value={s._id}>
+                                {s.spvName || s.name} {s.registrationDetails?.cin || s.registrationNumber ? `(${s.registrationDetails?.cin || s.registrationNumber})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null;
+                      })}
+                      {/* Also show SPVs without a trust assigned */}
+                      {spvs.filter(s => {
+                        const sTrustId = s.trust?._id || s.trust;
+                        return !sTrustId || !trusts.find(t => String(t._id) === String(sTrustId));
+                      }).length > 0 && (
+                        <optgroup label="Unassigned SPVs">
+                          {spvs.filter(s => {
+                            const sTrustId = s.trust?._id || s.trust;
+                            return !sTrustId || !trusts.find(t => String(t._id) === String(sTrustId));
+                          }).map(s => (
+                            <option key={s._id} value={s._id}>
+                              {s.spvName || s.name} {s.registrationDetails?.cin || s.registrationNumber ? `(${s.registrationDetails?.cin || s.registrationNumber})` : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </>
+                  )}
                 </select>
+                {spvs.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-1">Create an SPV first in the SPVs section</p>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <button className="btn-secondary" onClick={()=>setAssignFor(null)}>Cancel</button>

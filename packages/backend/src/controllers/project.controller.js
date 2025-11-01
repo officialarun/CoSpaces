@@ -54,15 +54,63 @@ exports.getProjects = async (req, res, next) => {
 
 exports.getListedProjects = async (req, res, next) => {
   try {
-    // Return all publicly visible projects (listed, fundraising, and approved)
+    // Return all publicly visible projects (listed, fundraising, under_acquisition, and approved)
     const projects = await Project.find({
-      status: { $in: ['listed', 'fundraising', 'approved'] },
+      status: { $in: ['listed', 'fundraising', 'under_acquisition', 'approved'] },
       isPublic: true
     })
+      .populate('spv', 'spvName spvCode')
       .select('-checklist -dueDiligence')
       .sort({ 'timeline.listedAt': -1, createdAt: -1 });
+
+    // Fix any projects that have SPV but wrong status (data consistency)
+    for (const project of projects) {
+      // Check if project has SPV (either ObjectId or populated object)
+      const hasSPV = project.spv && (typeof project.spv === 'object' ? project.spv._id : project.spv);
+      if (hasSPV && project.status !== 'approved' && project.status !== 'acquired') {
+        project.status = 'approved';
+        await project.save();
+      }
+    }
+
+    // Calculate funding progress for all projects
+    const Subscription = require('../models/Subscription.model');
+    const Payment = require('../models/Payment.model');
+    
+    const projectIds = projects.map(p => p._id);
+    
+    // Aggregate subscriptions
+    const subAgg = await Subscription.aggregate([
+      { $match: { project: { $in: projectIds }, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
+      { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
+    ]);
+    
+    // Aggregate payments
+    const payAgg = await Payment.aggregate([
+      { $match: { project: { $in: projectIds }, status: 'captured' } },
+      { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
+    ]);
+    
+    // Create a map of project ID to raised amount
+    const raisedMap = new Map();
+    subAgg.forEach(s => {
+      raisedMap.set(String(s._id), (raisedMap.get(String(s._id)) || 0) + (s.totalPaid || 0));
+    });
+    payAgg.forEach(p => {
+      raisedMap.set(String(p._id), (raisedMap.get(String(p._id)) || 0) + (p.total || 0));
+    });
+    
+    // Add funding data to each project
+    const projectsWithFunding = projects.map(project => {
+      const projObj = project.toObject();
+      projObj.funding = {
+        raisedPaid: raisedMap.get(String(project._id)) || 0,
+        target: project.financials?.targetRaise || 0,
+      };
+      return projObj;
+    });
       
-    res.json({ success: true, data: { projects } });
+    res.json({ success: true, data: { projects: projectsWithFunding } });
   } catch (error) {
     next(error);
   }

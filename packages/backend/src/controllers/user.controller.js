@@ -34,9 +34,10 @@ exports.updateProfile = async (req, res, next) => {
 
 exports.updatePhone = async (req, res, next) => {
   try {
-    const { phone } = req.body;
+    const phone = req.body.phone?.trim();
     
-    if (!phone) {
+    // Validate phone number
+    if (!phone || phone.length === 0) {
       return res.status(400).json({ error: 'Phone number is required' });
     }
     
@@ -58,6 +59,10 @@ exports.updatePhone = async (req, res, next) => {
       { new: true, runValidators: true }
     );
     
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
     // TODO: Send OTP to phone number for verification
     
     res.json({ 
@@ -66,6 +71,20 @@ exports.updatePhone = async (req, res, next) => {
       data: { user } 
     });
   } catch (error) {
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: errors.join(', ') 
+      });
+    }
+    
+    // Handle duplicate key error (phone already exists)
+    if (error.code === 11000 && error.keyPattern?.phone) {
+      return res.status(400).json({ error: 'Phone number already in use' });
+    }
+    
     next(error);
   }
 };

@@ -6,12 +6,14 @@ import { kycAPI } from '../../lib/api';
 import { FaCheckCircle, FaHourglassHalf, FaTimesCircle, FaClock } from 'react-icons/fa';
 
 function KYCStatus() {
-  const { user } = useAuth();
+  const { user, loadUser } = useAuth();
   const [kycData, setKYCData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadKYCStatus();
+    // Refresh user data to ensure KYC status is up to date
+    loadUser();
   }, []);
 
   const loadKYCStatus = async () => {

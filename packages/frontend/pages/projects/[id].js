@@ -363,12 +363,25 @@ export default function ProjectDetail() {
                   </div>
                 )}
 
-                <button
-                  onClick={checkEligibility}
-                  className="w-full btn-primary mb-3"
-                >
-                  Invest Now
-                </button>
+                {/* Invest Now Button - Hide if fully funded */}
+                {raised >= target && target > 0 ? (
+                  <div className="w-full p-4 mb-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                    <p className="text-green-800 font-semibold">Funding Complete</p>
+                    <p className="text-sm text-green-600 mt-1">This project has reached its funding target</p>
+                  </div>
+                ) : project.status === 'funded' ? (
+                  <div className="w-full p-4 mb-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+                    <p className="text-blue-800 font-semibold">Fully Funded</p>
+                    <p className="text-sm text-blue-600 mt-1">No further investments accepted</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={checkEligibility}
+                    className="w-full btn-primary mb-3"
+                  >
+                    Invest Now
+                  </button>
+                )}
 
                 <div className="text-center text-sm text-gray-500">
                   <p>Regulated under Companies Act 2013</p>

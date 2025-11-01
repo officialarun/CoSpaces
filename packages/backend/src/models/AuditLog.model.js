@@ -29,6 +29,9 @@ const auditLogSchema = new mongoose.Schema({
       'subscription_rejected', 'subscription_cancelled', 'payment_received',
       'shares_allocated',
       
+      // Payments
+      'payment_order_created', 'payment_confirmed',
+      
       // Escrow
       'escrow_deposit', 'escrow_release', 'escrow_refund',
       

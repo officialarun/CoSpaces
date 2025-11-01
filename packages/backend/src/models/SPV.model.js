@@ -131,12 +131,20 @@ const spvSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true }
   }],
   
+  // Related Trust (many SPVs can belong to one Trust)
+  trust: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Trust',
+    required: false // Optional
+  },
+  
   // Related Project (one-to-one)
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
-    required: true,
-    unique: true
+    required: false, // Optional - can be assigned later via Assign SPV
+    unique: true,
+    sparse: true // Allow multiple null values
   },
   
   // Fundraising Details
@@ -340,8 +348,8 @@ const spvSchema = new mongoose.Schema({
 
 // Indexes
 // Note: spvCode has unique: true in field definition
+// Note: project has unique: true and sparse: true in field definition, so no separate index needed
 spvSchema.index({ status: 1 });
-spvSchema.index({ project: 1 });
 spvSchema.index({ 'registrationDetails.cin': 1 });
 
 // Virtual for fundraising percentage
