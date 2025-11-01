@@ -38,6 +38,9 @@ const auditLogSchema = new mongoose.Schema({
       // Documents
       'document_uploaded', 'document_signed', 'document_verified', 'document_downloaded',
       
+      // Equity Distribution & SHA
+      'equity_distributed', 'sha_generated', 'sha_esign_initiated', 'sha_signed', 'sha_esign_failed',
+      
       // Cap Table
       'shares_issued', 'shares_transferred', 'captable_updated',
       
@@ -89,7 +92,7 @@ const auditLogSchema = new mongoose.Schema({
   targetEntity: {
     entityType: {
       type: String,
-      enum: ['user', 'kyc', 'project', 'spv', 'subscription', 'document', 'captable', 'distribution', 'other']
+      enum: ['user', 'kyc', 'project', 'spv', 'subscription', 'document', 'captable', 'distribution', 'shareholder_agreement', 'trust', 'equity_distribution', 'other']
     },
     entityId: mongoose.Schema.Types.ObjectId,
     entityName: String

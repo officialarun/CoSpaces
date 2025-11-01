@@ -133,5 +133,15 @@ export const complianceAPI = {
   getComplianceDashboard: () => api.get('/compliance/dashboard'),
 };
 
+// SHA/eSign APIs
+export const shaAPI = {
+  getMyAgreements: () => api.get('/esign/sha/my-agreements'),
+  getPendingAgreements: () => api.get('/esign/sha/pending'),
+  getAgreementById: (agreementId) => api.get(`/esign/sha/${agreementId}`),
+  getSHAStatus: (agreementId) => api.get(`/esign/sha/${agreementId}/status`),
+  initiateSHA: (agreementId) => api.post(`/esign/sha/${agreementId}/initiate`),
+  mockSignSHA: (agreementId) => api.post(`/esign/sha/${agreementId}/mock-sign`),
+};
+
 export default api;
 

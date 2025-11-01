@@ -95,15 +95,23 @@ function MyInvestments() {
                         </div>
                       </div>
 
-                      <div className="grid md:grid-cols-4 gap-6">
+                      <div className="grid md:grid-cols-5 gap-6">
                         <div>
                           <p className="text-sm text-gray-500">Invested Amount</p>
                           <p className="text-lg font-bold">₹{investment.invested.toLocaleString()}</p>
                         </div>
                         <div>
                           <p className="text-sm text-gray-500">Shares Owned</p>
-                          <p className="text-lg font-bold">{investment.shares}</p>
+                          <p className="text-lg font-bold">{investment.shares?.toLocaleString() || 'N/A'}</p>
                         </div>
+                        {investment.equityPercentage !== null && investment.equityPercentage !== undefined && investment.hasSPV ? (
+                          <div>
+                            <p className="text-sm text-gray-500">Equity Share</p>
+                            <p className="text-lg font-bold text-primary-600">
+                              {investment.equityPercentage.toFixed(2)}%
+                            </p>
+                          </div>
+                        ) : null}
                         <div>
                           <p className="text-sm text-gray-500">Distributions Received</p>
                           <p className="text-lg font-bold text-green-600">

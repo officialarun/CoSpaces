@@ -972,6 +972,27 @@ exports.assignSPVToProject = async (req, res, next) => {
       metadata: { spvId: spv._id, trustId: spv.trust?._id }
     });
 
+    // Trigger equity distribution and SHA generation
+    try {
+      const equityController = require('./equity.controller');
+      const distributionResult = await equityController.distributeEquity(
+        spv._id.toString(),
+        project._id.toString(),
+        req.user._id.toString()
+      );
+      
+      logger.info('Equity distribution triggered after SPV assignment', {
+        projectId: project._id,
+        spvId: spv._id,
+        distributionsCount: distributionResult.distributions?.length || 0,
+        agreementsCount: distributionResult.agreements?.length || 0
+      });
+    } catch (equityError) {
+      // Log error but don't fail the SPV assignment
+      logger.error('Failed to distribute equity after SPV assignment:', equityError);
+      // Continue with response - equity can be distributed manually later if needed
+    }
+
     res.json({ success: true, message: 'SPV assigned to project', data: { project } });
   } catch (error) {
     logger.error('Error assigning SPV:', error);

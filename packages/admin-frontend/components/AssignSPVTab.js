@@ -16,14 +16,29 @@ export default function AssignSPVTab() {
   const load = async () => {
     try {
       setLoading(true);
-      // Recalculate funding on load so eligible projects auto-mark as funded
+      // Recalculate funding on load so eligible projects auto-mark as under_acquisition
       await adminProjectAPI.recalcFunding().catch(()=>{});
-      const [projRes, spvRes, trustRes] = await Promise.all([
-        adminProjectAPI.getProjects({ status: 'funded' }),
+      
+      // Fetch projects with 'under_acquisition' status (projects that completed fundraising)
+      // Also include 'funded' for backwards compatibility
+      const [underAcqRes, fundedRes, spvRes, trustRes] = await Promise.all([
+        adminProjectAPI.getProjects({ status: 'under_acquisition' }),
+        adminProjectAPI.getProjects({ status: 'funded' }).catch(() => ({ data: { data: { projects: [] } } })),
         adminSPVAPI.getSPVs({}),
         adminTrustAPI.getTrusts(),
       ]);
-      setProjects((projRes.data.data.projects||[]).filter(p=>!p.spv));
+      
+      // Combine and filter out projects that already have SPV assigned
+      const underAcqProjects = (underAcqRes.data.data.projects||[]).filter(p=>!p.spv);
+      const fundedProjects = (fundedRes.data.data.projects||[]).filter(p=>!p.spv);
+      
+      // Combine and deduplicate by project ID
+      const allProjects = [...underAcqProjects, ...fundedProjects];
+      const uniqueProjects = allProjects.filter((p, index, self) => 
+        index === self.findIndex(pr => pr._id === p._id)
+      );
+      
+      setProjects(uniqueProjects);
       setSpvs(spvRes.data.data.spvs||[]);
       setTrusts(trustRes.data.data.trusts||[]);
     } catch (e) {

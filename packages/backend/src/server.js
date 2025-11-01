@@ -30,6 +30,7 @@ const reportRoutes = require('./routes/report.routes');
 const diditRoutes = require('./routes/didit.routes');
 const adminRoutes = require('./routes/admin.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const esignRoutes = require('./routes/esign.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -123,6 +124,7 @@ app.use(`/api/${API_VERSION}/reports`, reportRoutes);
 app.use(`/api/${API_VERSION}/didit`, diditRoutes);
 app.use(`/api/${API_VERSION}/admin`, adminRoutes);
 app.use(`/api/${API_VERSION}/payments`, paymentRoutes);
+app.use(`/api/${API_VERSION}/esign`, esignRoutes);
 
 // 404 handler
 app.use((req, res) => {

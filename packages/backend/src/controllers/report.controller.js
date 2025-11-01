@@ -1,5 +1,6 @@
 const CapTable = require('../models/CapTable.model');
 const Distribution = require('../models/Distribution.model');
+const SPVEquityDistribution = require('../models/SPVEquityDistribution.model');
 const SPV = require('../models/SPV.model');
 const Project = require('../models/Project.model');
 const User = require('../models/User.model');
@@ -58,6 +59,22 @@ exports.getCapitalAccountStatement = async (req, res, next) => {
 
 exports.getPortfolioReport = async (req, res, next) => {
   try {
+    // Fetch equity distributions for the user (projects with assigned SPV)
+    const equityDistributions = await SPVEquityDistribution.find({
+      investor: req.user._id
+    })
+      .populate({
+        path: 'spv',
+        select: 'spvName spvCode project',
+        populate: {
+          path: 'project',
+          select: 'projectName projectCode'
+        }
+      })
+      .populate('project', 'projectName projectCode')
+      .sort({ distributionDate: -1 });
+
+    // Also fetch CapTable entries for backwards compatibility
     const capTableEntries = await CapTable.find({
       shareholder: req.user._id,
       status: 'active'
@@ -66,21 +83,61 @@ exports.getPortfolioReport = async (req, res, next) => {
     const portfolio = {
       totalInvested: 0,
       totalDistributions: 0,
-      activeInvestments: capTableEntries.length,
+      activeInvestments: 0,
       investments: []
     };
-    
+
+    // Process equity distributions (preferred - for projects with SPV assigned)
+    for (const distribution of equityDistributions) {
+      // Only include if project has SPV assigned
+      if (distribution.spv && distribution.spv.project) {
+        portfolio.totalInvested += distribution.investmentAmount;
+        
+        // Get distributions received from CapTable if available
+        const capEntry = capTableEntries.find(
+          entry => entry.spv._id.toString() === distribution.spv._id.toString()
+        );
+        const distributionsReceived = capEntry?.totalDistributionsReceived || 0;
+        portfolio.totalDistributions += distributionsReceived;
+
+        portfolio.investments.push({
+          spv: distribution.spv.spvName,
+          spvId: distribution.spv._id,
+          projectId: distribution.project._id,
+          projectName: distribution.project.projectName,
+          invested: distribution.investmentAmount,
+          shares: distribution.numberOfShares,
+          equityPercentage: distribution.equityPercentage,
+          distributionsReceived: distributionsReceived,
+          hasSPV: true
+        });
+        portfolio.activeInvestments++;
+      }
+    }
+
+    // Process CapTable entries that don't have equity distribution (older entries or different structure)
     for (const entry of capTableEntries) {
-      portfolio.totalInvested += entry.investmentAmount;
-      portfolio.totalDistributions += entry.totalDistributionsReceived;
+      // Skip if already included from equity distributions
+      const alreadyIncluded = portfolio.investments.some(
+        inv => inv.spvId?.toString() === entry.spv._id.toString()
+      );
       
-      portfolio.investments.push({
-        spv: entry.spv.spvName,
-        projectId: entry.spv.project,
-        invested: entry.investmentAmount,
-        shares: entry.numberOfShares,
-        distributionsReceived: entry.totalDistributionsReceived
-      });
+      if (!alreadyIncluded) {
+        portfolio.totalInvested += entry.investmentAmount;
+        portfolio.totalDistributions += entry.totalDistributionsReceived;
+        
+        portfolio.investments.push({
+          spv: entry.spv.spvName,
+          spvId: entry.spv._id,
+          projectId: entry.spv.project,
+          invested: entry.investmentAmount,
+          shares: entry.numberOfShares,
+          equityPercentage: entry.ownershipPercentage || null, // Use ownershipPercentage from CapTable if available
+          distributionsReceived: entry.totalDistributionsReceived,
+          hasSPV: !!entry.spv.project
+        });
+        portfolio.activeInvestments++;
+      }
     }
     
     res.json({ success: true, data: { portfolio } });

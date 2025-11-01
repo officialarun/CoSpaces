@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '../lib/auth';
@@ -13,13 +13,30 @@ import {
   FaSignOutAlt,
   FaBars,
   FaTimes,
-  FaShieldAlt
+  FaShieldAlt,
+  FaFileSignature
 } from 'react-icons/fa';
 
 export default function DashboardLayout({ children }) {
   const { user, logout, hasRole } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingSHACount, setPendingSHACount] = useState(0);
+
+  // Check for pending SHAs on mount
+  useEffect(() => {
+    if (user?.role === 'investor') {
+      import('../lib/api').then(({ shaAPI }) => {
+        shaAPI.getPendingAgreements()
+          .then(response => {
+            setPendingSHACount(response.data.count || 0);
+          })
+          .catch(() => {
+            // Silently fail - don't show error for navigation
+          });
+      });
+    }
+  }, [user]);
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: FaHome, roles: [] },
@@ -28,6 +45,13 @@ export default function DashboardLayout({ children }) {
     { name: 'Subscriptions', href: '/dashboard/subscriptions', icon: FaFileInvoice, roles: ['investor'] },
     { name: 'Distributions', href: '/dashboard/distributions', icon: FaChartLine, roles: ['investor'] },
     { name: 'KYC Status', href: '/kyc/status', icon: FaShieldAlt, roles: ['investor'] },
+    { 
+      name: 'Sign Agreements', 
+      href: '/dashboard/sha-signing', 
+      icon: FaFileSignature, 
+      roles: ['investor'],
+      badge: pendingSHACount > 0 ? pendingSHACount : null
+    },
     { name: 'Profile', href: '/dashboard/profile', icon: FaUser, roles: [] },
     { name: 'Admin Panel', href: '/admin', icon: FaCog, roles: ['admin', 'compliance_officer', 'asset_manager'] },
   ];
@@ -71,6 +95,11 @@ export default function DashboardLayout({ children }) {
                 >
                   <item.icon className="mr-3 text-lg" />
                   {item.name}
+                  {item.badge && (
+                    <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -108,6 +137,11 @@ export default function DashboardLayout({ children }) {
                   >
                     <item.icon className="mr-3 text-lg" />
                     {item.name}
+                    {item.badge && (
+                      <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

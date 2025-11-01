@@ -395,6 +395,160 @@ class DiditService {
     const user = await User.findById(userId).select('dateOfBirth address');
     return !!(user.dateOfBirth || user.address?.street);
   }
+
+  /**
+   * Initiate eSign process for a document using Mock implementation
+   * (DIDIT doesn't provide eSign, so we use mock implementation)
+   * @param {String} documentUrl - URL of the document to be signed (Cloudinary URL)
+   * @param {Object} signerDetails - Signer information { name, email, phone }
+   * @param {String} userId - User ID for audit logging
+   * @param {Object} metadata - Additional metadata (agreementId, projectId, etc.)
+   * @returns {Object} - { eSignRequestId, hash, signingUrl }
+   */
+  async initiateESign(documentUrl, signerDetails, userId, metadata = {}) {
+    try {
+      if (!documentUrl) {
+        throw new Error('Document URL is required');
+      }
+      if (!signerDetails || !signerDetails.email) {
+        throw new Error('Signer email is required');
+      }
+
+      // Use mock eSign implementation (DIDIT doesn't provide eSign)
+      const mockESignService = require('./mockESign.service');
+      
+      logger.info(`Mock eSign initiation started for user ${userId}`, {
+        documentUrl: documentUrl.substring(0, 50) + '...',
+        signerEmail: signerDetails.email
+      });
+
+      // Log eSign initiation
+      await AuditLog.logEvent({
+        userId,
+        eventType: 'sha_esign_initiated',
+        eventCategory: 'document',
+        action: 'Mock eSign initiated',
+        details: {
+          documentUrl: documentUrl.substring(0, 100),
+          signerEmail: signerDetails.email,
+          metadata,
+          isMock: true
+        }
+      });
+
+      // Call mock eSign service
+      const mockResult = await mockESignService.mockInitiateESign(
+        documentUrl,
+        signerDetails,
+        userId,
+        metadata
+      );
+
+      logger.info('Mock eSign response received:', {
+        requestId: mockResult.eSignRequestId,
+        hasHash: !!mockResult.hash,
+        hasSigningUrl: !!mockResult.signingUrl
+      });
+
+      return {
+        eSignRequestId: mockResult.eSignRequestId,
+        hash: mockResult.hash,
+        signingUrl: mockResult.signingUrl,
+        expiresAt: mockResult.expiresAt,
+        isMock: true
+      };
+    } catch (error) {
+      logger.error('Mock eSign initiation failed:', {
+        message: error.message,
+        stack: error.stack
+      });
+
+      await AuditLog.logEvent({
+        userId,
+        eventType: 'sha_esign_failed',
+        eventCategory: 'document',
+        action: 'Mock eSign initiation failed',
+        details: {
+          error: error.message,
+          isMock: true
+        },
+        status: 'error'
+      });
+
+      throw new Error('Failed to initiate mock eSign: ' + error.message);
+    }
+  }
+
+  /**
+   * Verify eSign callback/webhook from DIDIT
+   * @param {Object} callbackData - Data received from DIDIT webhook
+   * @param {String} signature - Webhook signature for verification
+   * @returns {Object} - Verification result with eSignRequestId, status, signedAt
+   */
+  async verifyESign(callbackData, signature) {
+    try {
+      // Verify webhook signature if provided
+      if (signature && process.env.DIDIT_WEBHOOK_SECRET) {
+        const expectedSignature = crypto
+          .createHmac('sha256', process.env.DIDIT_WEBHOOK_SECRET)
+          .update(JSON.stringify(callbackData))
+          .digest('hex');
+
+        if (signature !== expectedSignature) {
+          throw new Error('Invalid webhook signature');
+        }
+      }
+
+      // Extract relevant data from callback
+      const eSignRequestId = callbackData.eSignRequestId || callbackData.request_id || callbackData.id;
+      const status = callbackData.status || callbackData.event_type;
+      const signedAt = callbackData.signedAt || callbackData.signed_at || callbackData.timestamp;
+
+      logger.info('DIDIT eSign callback verified:', {
+        eSignRequestId,
+        status,
+        signedAt
+      });
+
+      return {
+        eSignRequestId,
+        status,
+        signedAt: signedAt ? new Date(signedAt) : new Date(),
+        certificate: callbackData.certificate,
+        signatureHash: callbackData.signatureHash || callbackData.signature_hash,
+        metadata: callbackData.metadata || {}
+      };
+    } catch (error) {
+      logger.error('Failed to verify eSign callback:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get eSign status for a request
+   * @param {String} eSignRequestId - DIDIT eSign request ID
+   * @returns {Object} - Current status and details
+   */
+  async getESignStatus(eSignRequestId) {
+    try {
+      const response = await this.api.get(`/esign/status/${eSignRequestId}`, {
+        headers: {
+          'x-api-key': this.apiKey
+        }
+      });
+
+      return {
+        eSignRequestId,
+        status: response.data.status,
+        signedAt: response.data.signedAt ? new Date(response.data.signedAt) : null,
+        expiresAt: response.data.expiresAt ? new Date(response.data.expiresAt) : null,
+        signingUrl: response.data.signingUrl || response.data.signing_url
+      };
+    } catch (error) {
+      logger.error('Failed to get eSign status:', error);
+      throw new Error('Failed to get eSign status: ' + (error.response?.data?.message || error.message));
+    }
+  }
 }
 
 module.exports = new DiditService();
