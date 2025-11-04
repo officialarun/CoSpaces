@@ -55,9 +55,19 @@ export const userAPI = {
   getProfile: () => api.get('/users/profile'),
   updateProfile: (data) => api.put('/users/profile', data),
   updatePhone: (phone) => api.put('/users/phone', { phone }),
-  updateBankDetails: (data) => api.put('/users/bank-details', data),
+  // Bank Details APIs
+  addBankDetails: (data) => api.post('/users/bank-details', data),
+  getBankDetails: () => api.get('/users/bank-details'),
+  updateBankDetails: (bankDetailsId, data) => api.put(`/users/bank-details/${bankDetailsId}`, data),
+  deleteBankDetails: (bankDetailsId) => api.delete(`/users/bank-details/${bankDetailsId}`),
+  setPrimaryBank: (bankDetailsId) => api.put(`/users/bank-details/${bankDetailsId}/primary`),
   updateOnboardingStep1: (data) => api.put('/users/onboarding/step1', data),
   updateOnboardingStep2: (data) => api.put('/users/onboarding/step2', data),
+};
+
+// Bank Payment APIs
+export const bankPaymentAPI = {
+  getPaymentHistory: (userId) => api.get(`/bank-payments/history/${userId}`),
 };
 
 // DIDIT APIs

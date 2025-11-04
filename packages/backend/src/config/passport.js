@@ -57,6 +57,11 @@ module.exports = function(passport) {
             user.authProvider = 'google';
             user.avatar = profile.photos[0]?.value;
             user.isEmailVerified = true; // Google emails are verified
+            // Ensure phone field exists (initialize if missing)
+            if (user.phone === undefined) {
+              user.phone = null;
+              user.isPhoneVerified = false;
+            }
             await user.save();
             console.log('✅ Google account linked successfully');
             return done(null, user);
@@ -74,7 +79,8 @@ module.exports = function(passport) {
             role: 'investor',
             avatar: profile.photos[0]?.value,
             isEmailVerified: true,
-            // Phone will be added during KYC - not required for OAuth
+            phone: null, // Initialize phone field (null for OAuth users, will be added later)
+            isPhoneVerified: false, // Initialize phone verification status
             consents: {
               termsAccepted: true,
               termsAcceptedAt: new Date(),

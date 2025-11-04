@@ -119,5 +119,11 @@ export const adminDistributionAPI = {
   markInvestorPaid: (id, investorId, data) => api.put(`/distributions/${id}/investor/${investorId}/mark-paid`, data),
 };
 
+// Bank Payment APIs
+export const bankPaymentAPI = {
+  processBulkPayments: (distributionId) => api.post('/bank-payments/process-bulk', { distributionId }),
+  getPaymentHistory: (userId) => api.get(`/bank-payments/history/${userId}`),
+};
+
 export default api;
 

@@ -21,7 +21,33 @@ exports.submitKYC = async (req, res, next) => {
         kycData.individualKYC.aadhaarNumber = encrypt(req.body.individualKYC.aadhaarNumber);
       }
       if (req.body.individualKYC.panNumber) {
-        kycData.individualKYC.panNumber = encrypt(req.body.individualKYC.panNumber);
+        // Convert PAN to uppercase before encryption (defensive measure)
+        kycData.individualKYC.panNumber = encrypt(String(req.body.individualKYC.panNumber).toUpperCase().trim());
+      }
+    }
+    
+    // Handle entityKYC PAN fields as well
+    if (req.body.entityKYC) {
+      if (req.body.entityKYC.pan) {
+        kycData.entityKYC.pan = encrypt(String(req.body.entityKYC.pan).toUpperCase().trim());
+      }
+      // Handle directors' PAN numbers
+      if (req.body.entityKYC.directors && Array.isArray(req.body.entityKYC.directors)) {
+        kycData.entityKYC.directors = req.body.entityKYC.directors.map(director => ({
+          ...director,
+          panNumber: director.panNumber ? encrypt(String(director.panNumber).toUpperCase().trim()) : director.panNumber
+        }));
+      }
+      // Handle beneficial owners' PAN numbers
+      if (req.body.entityKYC.beneficialOwners && Array.isArray(req.body.entityKYC.beneficialOwners)) {
+        kycData.entityKYC.beneficialOwners = req.body.entityKYC.beneficialOwners.map(owner => ({
+          ...owner,
+          panNumber: owner.panNumber ? encrypt(String(owner.panNumber).toUpperCase().trim()) : owner.panNumber
+        }));
+      }
+      // Handle authorized signatory PAN
+      if (req.body.entityKYC.authorizedSignatory?.panNumber) {
+        kycData.entityKYC.authorizedSignatory.panNumber = encrypt(String(req.body.entityKYC.authorizedSignatory.panNumber).toUpperCase().trim());
       }
     }
     

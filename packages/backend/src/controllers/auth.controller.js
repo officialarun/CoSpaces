@@ -403,7 +403,33 @@ exports.logout = async (req, res, next) => {
 // Get current user
 exports.getCurrentUser = async (req, res, next) => {
   try {
+    // Fetch user with all fields (phone is included by default, no select needed)
     const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Also check raw database value using lean()
+    const rawUser = await User.findById(req.user._id).lean();
+    
+    // Log phone for debugging
+    console.log('getCurrentUser - User ID:', req.user._id);
+    console.log('getCurrentUser - User email:', user.email);
+    console.log('getCurrentUser - User authProvider:', user.authProvider);
+    console.log('getCurrentUser - User googleId:', user.googleId);
+    console.log('getCurrentUser - phone field (document):', user.phone);
+    console.log('getCurrentUser - phone type (document):', typeof user.phone);
+    console.log('getCurrentUser - phone field (raw/lean):', rawUser.phone);
+    console.log('getCurrentUser - phone type (raw/lean):', typeof rawUser.phone);
+    console.log('getCurrentUser - phone === null:', user.phone === null);
+    console.log('getCurrentUser - phone === undefined:', user.phone === undefined);
+    console.log('getCurrentUser - phone truthy check:', !!user.phone);
+    
+    // If phone is null but should exist, log a warning
+    if (user.phone === null || user.phone === undefined) {
+      console.log('⚠️ WARNING: getCurrentUser returning null phone for user:', user.email);
+    }
 
     res.json({
       success: true,

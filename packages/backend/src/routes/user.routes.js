@@ -7,7 +7,13 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.get('/profile', authenticate, userController.getProfile);
 router.put('/profile', authenticate, userController.updateProfile);
 router.put('/phone', authenticate, userController.updatePhone);
-router.put('/bank-details', authenticate, userController.updateBankDetails);
+
+// Bank Details routes
+router.post('/bank-details', authenticate, userController.addBankDetails);
+router.get('/bank-details', authenticate, userController.getBankDetails);
+router.put('/bank-details/:bankDetailsId', authenticate, userController.updateBankDetails);
+router.delete('/bank-details/:bankDetailsId', authenticate, userController.deleteBankDetails);
+router.put('/bank-details/:bankDetailsId/primary', authenticate, userController.setPrimaryBank);
 
 // Onboarding routes
 router.put('/onboarding/step1', authenticate, userController.updateOnboardingStep1);

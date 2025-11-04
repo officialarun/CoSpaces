@@ -210,6 +210,8 @@ exports.getMyDistributions = async (req, res, next) => {
 
 exports.getDistributionById = async (req, res, next) => {
   try {
+    const BankDetails = require('../models/BankDetails.model');
+    
     const distribution = await Distribution.findById(req.params.id)
       .populate('spv', 'spvName spvCode')
       .populate('project', 'projectName projectCode')
@@ -221,8 +223,61 @@ exports.getDistributionById = async (req, res, next) => {
     if (!distribution) {
       return res.status(404).json({ error: 'Distribution not found' });
     }
+
+    // Populate bank details for each investor
+    const distributionObj = distribution.toObject();
     
-    res.json({ success: true, data: { distribution } });
+    // Only populate bank details if there are investor distributions
+    try {
+      if (distributionObj.investorDistributions && Array.isArray(distributionObj.investorDistributions) && distributionObj.investorDistributions.length > 0) {
+        const investorIds = distributionObj.investorDistributions
+          .filter(inv => inv && inv.investor)
+          .map(inv => inv.investor._id || inv.investor);
+        
+        if (investorIds.length > 0) {
+          try {
+            const bankDetailsArray = await BankDetails.find({
+              user: { $in: investorIds },
+              isActive: true
+            }).select('+accountNumber').sort({ isPrimary: -1 });
+
+            // Attach bank details to investor distributions
+            distributionObj.investorDistributions = distributionObj.investorDistributions.map(inv => {
+              if (!inv || !inv.investor) return inv;
+              
+              try {
+                const investorId = (inv.investor._id || inv.investor).toString();
+                const bankDetails = bankDetailsArray.find(bd => bd && bd.user && bd.user.toString() === investorId);
+                
+                if (bankDetails) {
+                  inv.bankDetails = {
+                    accountHolderName: bankDetails.accountHolderName,
+                    accountNumber: bankDetails.maskedAccountNumber || '****',
+                    ifscCode: bankDetails.ifscCode,
+                    bankName: bankDetails.bankName,
+                    branchName: bankDetails.branchName,
+                    accountType: bankDetails.accountType
+                  };
+                }
+              } catch (err) {
+                console.error('Error attaching bank details to investor:', err);
+                // Continue without bank details for this investor
+              }
+              
+              return inv;
+            });
+          } catch (bankDetailsError) {
+            console.error('Error fetching bank details:', bankDetailsError);
+            // Continue without bank details - distribution will still be returned
+          }
+        }
+      }
+    } catch (populateError) {
+      console.error('Error populating bank details:', populateError);
+      // Continue - return distribution without bank details
+    }
+    
+    res.json({ success: true, data: { distribution: distributionObj } });
   } catch (error) {
     next(error);
   }

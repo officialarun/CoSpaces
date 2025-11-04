@@ -20,7 +20,7 @@ const authenticate = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      // Get user from database
+      // Get user from database - include phone field
       req.user = await User.findById(decoded.id).select('-password');
       
       if (!req.user) {
