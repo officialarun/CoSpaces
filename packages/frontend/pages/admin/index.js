@@ -101,7 +101,7 @@ function AdminDashboard() {
                 <FaShieldAlt className="text-yellow-600 text-4xl" />
                 <div>
                   <h3 className="text-lg font-bold">Compliance Dashboard</h3>
-                  <p className="text-sm text-gray-600">Review KYC, AML, and subscriptions</p>
+                  <p className="text-sm text-gray-600">Review KYC and AML status</p>
                 </div>
               </div>
             </Link>

@@ -24,10 +24,7 @@ const auditLogSchema = new mongoose.Schema({
       // SPV
       'spv_created', 'spv_incorporated', 'spv_status_changed',
       
-      // Subscriptions
-      'subscription_created', 'subscription_submitted', 'subscription_approved',
-      'subscription_rejected', 'subscription_cancelled', 'payment_received',
-      'shares_allocated',
+      'payment_received', 'shares_allocated',
       
       // Payments
       'payment_order_created', 'payment_confirmed',
@@ -65,7 +62,7 @@ const auditLogSchema = new mongoose.Schema({
     type: String,
     enum: [
       'authentication', 'authorization', 'user_management', 'kyc_aml',
-      'project', 'spv', 'subscription', 'payment', 'escrow',
+      'project', 'spv', 'payment', 'escrow',
       'document', 'compliance', 'distribution', 'asset',
       'system', 'security', 'other'
     ],
@@ -92,7 +89,7 @@ const auditLogSchema = new mongoose.Schema({
   targetEntity: {
     entityType: {
       type: String,
-      enum: ['user', 'kyc', 'project', 'spv', 'subscription', 'document', 'captable', 'distribution', 'shareholder_agreement', 'trust', 'equity_distribution', 'other']
+      enum: ['user', 'kyc', 'project', 'spv', 'document', 'captable', 'distribution', 'shareholder_agreement', 'trust', 'equity_distribution', 'other']
     },
     entityId: mongoose.Schema.Types.ObjectId,
     entityName: String

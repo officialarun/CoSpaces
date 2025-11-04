@@ -66,6 +66,7 @@ export const adminProjectAPI = {
   unpublishProject: (id) => api.put(`/admin/projects/${id}/unpublish`),
   deleteProject: (id) => api.delete(`/admin/projects/${id}`),
   assignSPV: (projectId, spvId) => api.post(`/admin/projects/${projectId}/assign-spv`, { spvId }),
+  assignAssetManager: (projectId, assetManagerId) => api.post(`/admin/projects/${projectId}/assign-asset-manager`, { assetManagerId }),
 };
 
 // Trust APIs
@@ -96,6 +97,26 @@ export const adminKYCAPI = {
 export const adminStatsAPI = {
   getStats: () => api.get('/admin/stats'),
   getActivity: () => api.get('/admin/activity'),
+};
+
+// Admin Staff Management APIs
+export const adminStaffAPI = {
+  getStaff: (params) => api.get('/admin/staff', { params }),
+  createStaff: (data) => api.post('/admin/staff/create', data),
+};
+
+// Admin Distribution APIs
+export const adminDistributionAPI = {
+  getAllDistributions: (params) => api.get('/distributions', { params }),
+  getDistributionById: (id) => api.get(`/distributions/${id}`),
+  createDistribution: (data) => api.post('/distributions/calculate', data),
+  updateDistribution: (id, data) => api.put(`/distributions/${id}`, data),
+  cancelDistribution: (id, reason) => api.put(`/distributions/${id}/cancel`, { reason }),
+  approveAsAssetManager: (id, comments) => api.put(`/distributions/${id}/approve/asset-manager`, { comments }),
+  approveAsCompliance: (id, comments) => api.put(`/distributions/${id}/approve/compliance`, { comments }),
+  approveAsAdmin: (id, comments) => api.put(`/distributions/${id}/approve/admin`, { comments }),
+  processPayments: (id) => api.post(`/distributions/${id}/process-payments`),
+  markInvestorPaid: (id, investorId, data) => api.put(`/distributions/${id}/investor/${investorId}/mark-paid`, data),
 };
 
 export default api;

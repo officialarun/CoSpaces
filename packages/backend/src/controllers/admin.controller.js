@@ -270,6 +270,150 @@ exports.deactivateUser = async (req, res, next) => {
 };
 
 /**
+ * Create staff member (Asset Manager or Compliance Officer)
+ * POST /api/v1/admin/staff/create
+ */
+exports.createStaff = async (req, res, next) => {
+  try {
+    const { firstName, lastName, email, password, role, phone } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !password || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: firstName, lastName, email, password, role'
+      });
+    }
+
+    // Validate role
+    if (!['asset_manager', 'compliance_officer'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role. Must be "asset_manager" or "compliance_officer"'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Import staff seed service
+    const staffSeedService = require('../services/staffSeed.service');
+
+    // Create and seed staff member
+    const userData = {
+      firstName,
+      lastName,
+      email,
+      password,
+      role,
+      phone: phone || ''
+    };
+
+    const staffUser = await staffSeedService.seedStaffMember(userData, req.user._id);
+
+    // Return user (excluding password)
+    const userResponse = staffUser.toObject();
+    delete userResponse.password;
+
+    logger.info(`Admin ${req.user.email} created staff member: ${staffUser.email} (${role})`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Staff member created successfully',
+      data: {
+        user: userResponse,
+        loginInstructions: {
+          email: staffUser.email,
+          password: 'As set by admin',
+          googleOAuth: `Can login via Google OAuth using ${staffUser.email}`,
+          note: 'Staff member can login immediately with email/password or Google OAuth'
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error creating staff member:', error);
+    
+    // Handle duplicate email error
+    if (error.message.includes('already exists')) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+
+    next(error);
+  }
+};
+
+/**
+ * Get all staff members (Asset Managers and Compliance Officers)
+ * GET /api/v1/admin/staff
+ */
+exports.getAllStaff = async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search = '',
+      role = '',
+      isActive = ''
+    } = req.query;
+
+    // Build query - only staff roles
+    const query = {
+      role: { $in: ['asset_manager', 'compliance_officer'] }
+    };
+    
+    // Search by name or email
+    if (search) {
+      query.$or = [
+        { email: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Filter by role
+    if (role && ['asset_manager', 'compliance_officer'].includes(role)) {
+      query.role = role;
+    }
+
+    // Filter by active status
+    if (isActive !== '') {
+      query.isActive = isActive === 'true';
+    }
+
+    const staff = await User.find(query)
+      .select('-password')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 });
+
+    const count = await User.countDocuments(query);
+
+    logger.info(`Admin ${req.user.email} retrieved ${staff.length} staff members`);
+
+    res.json({
+      success: true,
+      data: {
+        staff,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page),
+        totalStaff: count
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching staff members:', error);
+    next(error);
+  }
+};
+
+/**
  * Get user onboarding status
  * GET /api/v1/admin/users/:id/onboarding-status
  */
@@ -342,7 +486,7 @@ exports.getAllProjects = async (req, res, next) => {
     }
 
     const projects = await Project.find(query)
-      .populate('assetManager', 'profile.firstName profile.lastName email')
+      .populate('assetManager', 'firstName lastName email role')
       .populate('spv', 'spvName spvCode')
       .limit(limit * 1)
       .skip((page - 1) * limit)
@@ -360,24 +504,13 @@ exports.getAllProjects = async (req, res, next) => {
 
     const count = await Project.countDocuments(query);
 
-    // Aggregate raised amounts (paid) per project
-    const Subscription = require('../models/Subscription.model');
-    const sums = await Subscription.aggregate([
-      { $match: { status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-      { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-    ]);
-    const raisedMap = new Map(sums.map(s => [String(s._id), s.totalPaid]));
-
-    // Include direct payments (Razorpay) captured via Payment model
+    // Aggregate raised amounts from Payment model only
     const Payment = require('../models/Payment.model');
     const payAgg = await Payment.aggregate([
       { $match: { status: 'captured' } },
       { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
     ]);
-    for (const p of payAgg) {
-      const key = String(p._id);
-      raisedMap.set(key, (raisedMap.get(key) || 0) + (p.total || 0));
-    }
+    const raisedMap = new Map(payAgg.map(p => [String(p._id), p.total || 0]));
 
     logger.info(`Admin ${req.user.email} retrieved ${projects.length} projects`);
 
@@ -406,7 +539,6 @@ exports.getAllProjects = async (req, res, next) => {
 /** Recalculate funding status for all active projects */
 exports.recalculateFundingStatus = async (req, res, next) => {
   try {
-    const Subscription = require('../models/Subscription.model');
     const Payment = require('../models/Payment.model');
     // Include 'under_acquisition' so projects can be moved from funded to under_acquisition
     const candidateStatuses = ['fundraising', 'listed', 'approved', 'under_acquisition'];
@@ -414,21 +546,13 @@ exports.recalculateFundingStatus = async (req, res, next) => {
     let updated = 0;
 
     for (const project of projects) {
-      // Aggregate from both Subscriptions and Payments
-      const [subAgg, payAgg] = await Promise.all([
-        Subscription.aggregate([
-          { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-          { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-        ]),
-        Payment.aggregate([
-          { $match: { project: project._id, status: 'captured' } },
-          { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
-        ])
+      // Aggregate from Payments only
+      const payAgg = await Payment.aggregate([
+        { $match: { project: project._id, status: 'captured' } },
+        { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
       ]);
 
-      const subscriptionTotal = subAgg?.[0]?.totalPaid || 0;
-      const paymentTotal = payAgg?.[0]?.total || 0;
-      const totalRaised = subscriptionTotal + paymentTotal;
+      const totalRaised = payAgg?.[0]?.total || 0;
       const target = project.financials?.targetRaise || 0;
 
       if (totalRaised >= target && target > 0) {
@@ -999,6 +1123,85 @@ exports.assignSPVToProject = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Assign Asset Manager to Project
+ * POST /api/v1/admin/projects/:projectId/assign-asset-manager
+ */
+exports.assignAssetManagerToProject = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const { assetManagerId } = req.body;
+
+    if (!assetManagerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Asset manager ID is required'
+      });
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Verify that the user exists and has asset_manager role
+    const assetManager = await User.findById(assetManagerId);
+    if (!assetManager) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset manager not found'
+      });
+    }
+
+    if (assetManager.role !== 'asset_manager') {
+      return res.status(400).json({
+        success: false,
+        error: 'User must have asset_manager role'
+      });
+    }
+
+    // Update project
+    const previousAssetManager = project.assetManager;
+    project.assetManager = assetManager._id;
+    project.updatedBy = req.user._id;
+    await project.save();
+
+    // Populate before returning
+    await project.populate('assetManager', 'firstName lastName email role');
+
+    // Log audit event
+    await AuditLog.logEvent({
+      eventType: 'asset_manager_assigned_to_project',
+      eventCategory: 'project',
+      performedBy: req.user._id,
+      targetEntity: { entityType: 'project', entityId: project._id },
+      action: 'Asset manager assigned to project',
+      details: {
+        projectName: project.projectName,
+        projectCode: project.projectCode,
+        assetManagerId: assetManager._id,
+        assetManagerEmail: assetManager.email,
+        previousAssetManagerId: previousAssetManager?.toString() || null
+      }
+    });
+
+    logger.info(`Admin ${req.user.email} assigned asset manager ${assetManager.email} to project ${project.projectCode}`);
+
+    res.json({
+      success: true,
+      message: 'Asset manager assigned successfully',
+      data: { project }
+    });
+  } catch (error) {
+    logger.error('Error assigning asset manager:', error);
+    next(error);
+  }
+};
+
 // ==================== KYC MANAGEMENT ====================
 
 /**

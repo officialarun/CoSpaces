@@ -2,6 +2,8 @@ const KYC = require('../models/KYC.model');
 const User = require('../models/User.model');
 const AuditLog = require('../models/AuditLog.model');
 const { encrypt } = require('../utils/encryption');
+const notificationController = require('./notification.controller');
+const logger = require('../utils/logger');
 
 exports.submitKYC = async (req, res, next) => {
   try {
@@ -40,6 +42,11 @@ exports.submitKYC = async (req, res, next) => {
       action: 'KYC submitted',
       request: { ipAddress: req.ip }
     });
+    
+    // Send KYC submitted email (non-blocking)
+    notificationController.sendKYCEmail(req.user, 'submitted').catch(err =>
+      logger.error('Failed to send KYC submitted email', { userId: req.user._id, error: err.message })
+    );
     
     res.json({ success: true, data: { kyc } });
   } catch (error) {
@@ -161,6 +168,14 @@ exports.approveKYC = async (req, res, next) => {
       description: comments
     });
     
+    // Send KYC approved email (non-blocking)
+    const user = await User.findById(req.params.userId);
+    if (user) {
+      notificationController.sendKYCEmail(user, 'approved').catch(err =>
+        logger.error('Failed to send KYC approved email', { userId: user._id, error: err.message })
+      );
+    }
+    
     res.json({ success: true, data: { kyc } });
   } catch (error) {
     next(error);
@@ -195,6 +210,14 @@ exports.rejectKYC = async (req, res, next) => {
       action: 'KYC rejected',
       description: `${reason}: ${details}`
     });
+    
+    // Send KYC rejected email (non-blocking)
+    const user = await User.findById(req.params.userId);
+    if (user) {
+      notificationController.sendKYCEmail(user, 'rejected', reason).catch(err =>
+        logger.error('Failed to send KYC rejected email', { userId: user._id, error: err.message })
+      );
+    }
     
     res.json({ success: true, data: { kyc } });
   } catch (error) {

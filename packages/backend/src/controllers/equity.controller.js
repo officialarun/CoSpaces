@@ -8,6 +8,7 @@ const pdfGenerator = require('../services/pdfGenerator.service');
 const diditService = require('../services/didit.service');
 const AuditLog = require('../models/AuditLog.model');
 const logger = require('../utils/logger');
+const notificationController = require('./notification.controller');
 
 /**
  * Distribute equity among investors when SPV is assigned to project
@@ -211,6 +212,11 @@ exports.distributeEquity = async (spvId, projectId, performedBy) => {
             agreementId: agreement._id,
             eSignRequestId: eSignResult.eSignRequestId
           });
+
+          // Send SHA ready email (non-blocking)
+          notificationController.sendSHAEmail(investor, agreement, 'ready_to_sign', distribution).catch(err =>
+            logger.error('Failed to send SHA ready email', { userId: investor._id, error: err.message })
+          );
 
           // Log audit event
           await AuditLog.logEvent({

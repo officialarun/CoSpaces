@@ -3,6 +3,9 @@ const razorpay = require('../config/razorpay');
 const Project = require('../models/Project.model');
 const Payment = require('../models/Payment.model');
 const AuditLog = require('../models/AuditLog.model');
+const User = require('../models/User.model');
+const notificationController = require('./notification.controller');
+const logger = require('../utils/logger');
 
 exports.createOrder = async (req, res, next) => {
   try {
@@ -45,19 +48,12 @@ exports.createOrder = async (req, res, next) => {
 
     // Remaining target (optional guard)
     try {
-      const Subscription = require('../models/Subscription.model');
       const Payment = require('../models/Payment.model');
-      const [subAgg, payAgg] = await Promise.all([
-        Subscription.aggregate([
-          { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-          { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-        ]),
-        Payment.aggregate([
-          { $match: { project: project._id, status: 'captured' } },
-          { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
-        ])
+      const payAgg = await Payment.aggregate([
+        { $match: { project: project._id, status: 'captured' } },
+        { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
       ]);
-      const raisedSoFar = (subAgg?.[0]?.totalPaid || 0) + (payAgg?.[0]?.total || 0);
+      const raisedSoFar = payAgg?.[0]?.total || 0;
       const target = Number(project.financials?.targetRaise || 0);
       if (target && amountNum + raisedSoFar > target) {
         return res.status(400).json({ success: false, error: `Amount exceeds remaining target. Remaining: ₹${Math.max(0, target - raisedSoFar).toLocaleString()}` });
@@ -123,7 +119,7 @@ exports.verifyPayment = async (req, res, next) => {
     });
 
     // Record lightweight payment for funding progress
-    await Payment.create({
+    const payment = await Payment.create({
       user: userId,
       project: projectId,
       amountInINR: Number(amountInINR),
@@ -131,6 +127,20 @@ exports.verifyPayment = async (req, res, next) => {
       gateway: 'razorpay',
       razorpay: { orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature },
     });
+
+    // Send payment confirmation email (non-blocking)
+    const user = await User.findById(userId);
+    const project = await Project.findById(projectId);
+    if (user && project) {
+      const paymentData = {
+        _id: payment._id,
+        amount: payment.amountInINR,
+        paymentId: razorpay_payment_id
+      };
+      notificationController.sendPaymentEmail(user, paymentData, project).catch(err =>
+        logger.error('Failed to send payment confirmation email', { userId: user._id, error: err.message })
+      );
+    }
 
     return res.json({ success: true });
   } catch (err) {

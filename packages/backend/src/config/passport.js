@@ -1,5 +1,7 @@
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/User.model');
+const notificationController = require('../controllers/notification.controller');
+const logger = require('../utils/logger');
 
 module.exports = function(passport) {
   passport.use(
@@ -81,6 +83,11 @@ module.exports = function(passport) {
             }
           });
           console.log('✅ New user created:', newUser.email);
+
+          // Send welcome email (non-blocking)
+          notificationController.sendWelcomeEmail(newUser).catch(err =>
+            logger.error('Failed to send welcome email (Google OAuth)', { userId: newUser._id, error: err.message })
+          );
 
           done(null, newUser);
         } catch (error) {

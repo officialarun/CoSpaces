@@ -5,6 +5,7 @@ const AuditLog = require('../models/AuditLog.model');
 const logger = require('../utils/logger');
 const axios = require('axios');
 const cloudinary = require('../config/cloudinary');
+const notificationController = require('./notification.controller');
 
 /**
  * Get SHA status for a user
@@ -441,6 +442,11 @@ exports.mockSignSHA = async (req, res, next) => {
         isMock: true
       }
     });
+
+    // Send SHA signed email (non-blocking)
+    notificationController.sendSHAEmail(agreement.investor, agreement, 'signed').catch(err =>
+      logger.error('Failed to send SHA signed email', { userId: agreement.investor._id, error: err.message })
+    );
 
     logger.info(`SHA signed successfully via mock: ${agreement._id}`, {
       eSignRequestId: mockSignResult.eSignRequestId,

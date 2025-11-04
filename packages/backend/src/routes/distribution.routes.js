@@ -20,5 +20,13 @@ router.put('/:id/approve/admin', authenticate, authorize('admin'), distributionC
 router.post('/:id/process-payments', authenticate, authorize('admin'), distributionController.processPayments);
 router.put('/:id/investor/:investorId/mark-paid', authenticate, authorize('admin'), distributionController.markInvestorPaid);
 
+// Admin and Compliance Officer routes
+router.get('/', authenticate, authorize('admin', 'compliance_officer'), distributionController.getAllDistributions);
+router.get('/by-asset-manager/:assetManagerId', authenticate, authorize('asset_manager', 'admin'), distributionController.getDistributionsByAssetManager);
+
+// Update and cancel
+router.put('/:id', authenticate, authorize('admin'), distributionController.updateDistribution);
+router.put('/:id/cancel', authenticate, authorize('admin'), distributionController.cancelDistribution);
+
 module.exports = router;
 

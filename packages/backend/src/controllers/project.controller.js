@@ -31,9 +31,14 @@ exports.createProject = async (req, res, next) => {
 
 exports.getProjects = async (req, res, next) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 20, assetManager } = req.query;
     const query = {};
     if (status) query.status = status;
+    
+    // Filter by asset manager if provided
+    if (assetManager) {
+      query.assetManager = assetManager;
+    }
     
     const projects = await Project.find(query)
       .populate('assetManager', 'firstName lastName email')
@@ -73,17 +78,10 @@ exports.getListedProjects = async (req, res, next) => {
       }
     }
 
-    // Calculate funding progress for all projects
-    const Subscription = require('../models/Subscription.model');
+    // Calculate funding progress for all projects (using Payment model only)
     const Payment = require('../models/Payment.model');
     
     const projectIds = projects.map(p => p._id);
-    
-    // Aggregate subscriptions
-    const subAgg = await Subscription.aggregate([
-      { $match: { project: { $in: projectIds }, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-      { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-    ]);
     
     // Aggregate payments
     const payAgg = await Payment.aggregate([
@@ -93,9 +91,6 @@ exports.getListedProjects = async (req, res, next) => {
     
     // Create a map of project ID to raised amount
     const raisedMap = new Map();
-    subAgg.forEach(s => {
-      raisedMap.set(String(s._id), (raisedMap.get(String(s._id)) || 0) + (s.totalPaid || 0));
-    });
     payAgg.forEach(p => {
       raisedMap.set(String(p._id), (raisedMap.get(String(p._id)) || 0) + (p.total || 0));
     });
@@ -126,21 +121,14 @@ exports.getProjectById = async (req, res, next) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // Attach funding progress (subscriptions + payments)
-    const Subscription = require('../models/Subscription.model');
+    // Attach funding progress (payments only)
     const Payment = require('../models/Payment.model');
-    const [subAgg, payAgg] = await Promise.all([
-      Subscription.aggregate([
-        { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-        { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-      ]),
-      Payment.aggregate([
-        { $match: { project: project._id, status: 'captured' } },
-        { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
-      ])
+    const payAgg = await Payment.aggregate([
+      { $match: { project: project._id, status: 'captured' } },
+      { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
     ]);
 
-    const raisedPaid = (subAgg?.[0]?.totalPaid || 0) + (payAgg?.[0]?.total || 0);
+    const raisedPaid = payAgg?.[0]?.total || 0;
     const projObj = project.toObject();
     projObj.funding = { raisedPaid, target: project.financials?.targetRaise || 0 };
     

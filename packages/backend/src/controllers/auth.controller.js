@@ -6,6 +6,7 @@ const User = require('../models/User.model');
 const AuditLog = require('../models/AuditLog.model');
 const logger = require('../utils/logger');
 const { encrypt } = require('../utils/encryption');
+const notificationController = require('./notification.controller');
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -96,6 +97,11 @@ exports.signup = async (req, res, next) => {
         userAgent: req.get('user-agent')
       }
     });
+
+    // Send welcome email (non-blocking)
+    notificationController.sendWelcomeEmail(user).catch(err => 
+      logger.error('Failed to send welcome email', { userId: user._id, error: err.message })
+    );
 
     res.status(201).json({
       success: true,
