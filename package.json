@@ -29,8 +29,10 @@
   ],
   "author": "",
   "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  },
   "devDependencies": {
-    "concurrently": "^8.2.2",
     "@babel/cli": "^7.23.4",
     "@babel/core": "^7.23.5",
     "@babel/preset-env": "^7.23.5"
