@@ -14,22 +14,13 @@ module.exports = function(passport) {
       },
       async (req, accessToken, refreshToken, profile, done) => {
         try {
-          console.log('=== Google OAuth Callback ===');
-          console.log('Google Profile ID:', profile.id);
-          console.log('Email:', profile.emails[0]?.value);
-          console.log('Name:', profile.name.givenName, profile.name.familyName);
-
           // Check if user already exists
           let user = await User.findOne({ googleId: profile.id });
 
           if (user) {
-            console.log('✅ User found by Google ID:', user.email);
-            console.log('User Role:', user.role);
-            console.log('Is Active:', user.isActive);
-            
             // Check if user is deactivated
             if (!user.isActive) {
-              console.error('❌ User account is deactivated');
+              logger.warn('Google OAuth: User account is deactivated', { userId: user._id, email: user.email });
               return done(new Error('Account is deactivated'), null);
             }
             
@@ -42,13 +33,9 @@ module.exports = function(passport) {
           user = await User.findOne({ email });
 
           if (user) {
-            console.log('✅ User found by email, linking Google account:', email);
-            console.log('User Role:', user.role);
-            console.log('Is Active:', user.isActive);
-            
             // Check if user is deactivated
             if (!user.isActive) {
-              console.error('❌ User account is deactivated');
+              logger.warn('Google OAuth: User account is deactivated', { userId: user._id, email: user.email });
               return done(new Error('Account is deactivated'), null);
             }
             
@@ -63,12 +50,11 @@ module.exports = function(passport) {
               user.isPhoneVerified = false;
             }
             await user.save();
-            console.log('✅ Google account linked successfully');
+            logger.info('Google account linked to existing user', { userId: user._id, email: user.email });
             return done(null, user);
           }
 
           // Create new user
-          console.log('📝 Creating new user:', email);
           const newUser = await User.create({
             googleId: profile.id,
             authProvider: 'google',
@@ -88,7 +74,7 @@ module.exports = function(passport) {
               privacyPolicyAcceptedAt: new Date()
             }
           });
-          console.log('✅ New user created:', newUser.email);
+          logger.info('New user created via Google OAuth', { userId: newUser._id, email: newUser.email });
 
           // Send welcome email (non-blocking)
           notificationController.sendWelcomeEmail(newUser).catch(err =>
@@ -97,8 +83,7 @@ module.exports = function(passport) {
 
           done(null, newUser);
         } catch (error) {
-          console.error('❌ Google OAuth Error:', error.message);
-          console.error('Error Stack:', error.stack);
+          logger.error('Google OAuth error', { error: error.message, stack: error.stack });
           done(error, null);
         }
       }

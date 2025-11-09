@@ -260,20 +260,29 @@ exports.getDistributionById = async (req, res, next) => {
                   };
                 }
               } catch (err) {
-                console.error('Error attaching bank details to investor:', err);
+                logger.error('Error attaching bank details to investor', { 
+                  investorId, 
+                  error: err.message 
+                });
                 // Continue without bank details for this investor
               }
               
               return inv;
             });
           } catch (bankDetailsError) {
-            console.error('Error fetching bank details:', bankDetailsError);
+            logger.error('Error fetching bank details', { 
+              distributionId: req.params.id, 
+              error: bankDetailsError.message 
+            });
             // Continue without bank details - distribution will still be returned
           }
         }
       }
     } catch (populateError) {
-      console.error('Error populating bank details:', populateError);
+      logger.error('Error populating bank details', { 
+        distributionId: req.params.id, 
+        error: populateError.message 
+      });
       // Continue - return distribution without bank details
     }
     

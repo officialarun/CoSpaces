@@ -5,7 +5,13 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const passport = require('passport');
-require('dotenv').config();
+// require('dotenv').config();
+require("dotenv").config({
+  path: process.env.NODE_ENV === "production"
+    ? ".env.production"
+    : ".env"
+});
+
 
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');

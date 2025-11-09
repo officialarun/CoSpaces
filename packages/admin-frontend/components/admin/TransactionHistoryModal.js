@@ -22,7 +22,7 @@ export default function TransactionHistoryModal({ investor, onClose }) {
       setTransactions(response.data.transactions || []);
       setSummary(response.data.summary || null);
     } catch (error) {
-      console.error('Error fetching transaction history:', error);
+      // Silently handle transaction history errors
       toast.error('Failed to load transaction history');
     } finally {
       setLoading(false);

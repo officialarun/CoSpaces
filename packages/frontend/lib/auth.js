@@ -18,27 +18,12 @@ export const AuthProvider = ({ children }) => {
     if (token) {
       try {
         const response = await authAPI.getCurrentUser();
-        console.log('=== loadUser Debug ===');
-        console.log('Full response:', JSON.stringify(response, null, 2));
-        console.log('response.data:', response.data);
-        console.log('response.data.user:', response.data?.user);
-        console.log('response.data.user.phone:', response.data?.user?.phone);
-        console.log('response.data.user.phone type:', typeof response.data?.user?.phone);
-        console.log('response.data.user.phone === null:', response.data?.user?.phone === null);
-        console.log('response.data.user.phone === undefined:', response.data?.user?.phone === undefined);
-        
         const userData = response.data.user;
-        console.log('userData object:', userData);
-        console.log('userData.phone:', userData?.phone);
-        console.log('userData keys:', Object.keys(userData || {}));
         
         // Update localStorage as well for consistency
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
-        console.log('User state updated, phone:', userData?.phone);
-        console.log('=== End loadUser Debug ===');
       } catch (error) {
-        console.error('Failed to load user:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
@@ -87,7 +72,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await authAPI.logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      // Silently handle logout errors
     } finally {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

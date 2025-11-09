@@ -52,42 +52,24 @@ export default function DistributionPayments() {
   const fetchDistribution = async () => {
     try {
       setLoading(true);
-      console.log('Fetching distribution with ID:', id);
       const response = await adminDistributionAPI.getDistributionById(id);
-      console.log('Distribution API response:', response);
-      console.log('Response data:', response.data);
-      console.log('Response data.data:', response.data?.data);
-      console.log('Response data.data.distribution:', response.data?.data?.distribution);
       
       // Check multiple possible response structures
       const distribution = response.data?.data?.distribution || response.data?.distribution || response.data;
       
       if (distribution && distribution._id) {
         setDistribution(distribution);
-        console.log('Distribution set successfully:', distribution);
       } else {
-        console.error('Distribution not found in response. Full response:', response);
-        console.error('Response structure:', {
-          'response.data': response.data,
-          'response.data.data': response.data?.data,
-          'response.data.distribution': response.data?.distribution,
-          'response.data.data.distribution': response.data?.data?.distribution
-        });
         toast.error('Distribution not found in response');
         setDistribution(null);
       }
     } catch (error) {
-      console.error('Error fetching distribution:', error);
-      console.error('Error response:', error.response);
-      console.error('Error message:', error.message);
-      
       if (error.response?.status === 404) {
         toast.error('Distribution not found');
       } else {
         toast.error(error.response?.data?.error || error.message || 'Failed to load distribution details');
       }
       setDistribution(null);
-      // Don't redirect immediately, let user see the error state
     } finally {
       setLoading(false);
     }

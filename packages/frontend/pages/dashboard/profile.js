@@ -171,13 +171,9 @@ function ProfilePage() {
   const onSubmitPhone = async (data) => {
     setLoading(true);
     try {
-      console.log('onSubmitPhone called with data:', data);
-      console.log('Form values via getPhoneValues:', getPhoneValues());
-      
       // Get phone value from form data or directly from form values
       const phoneValue = data?.phone || getPhoneValues('phone') || '';
       const phone = phoneValue.toString().trim();
-      console.log('Trimmed phone value:', phone);
       
       if (!phone || phone.length === 0) {
         toast.error('Phone number cannot be empty');
@@ -185,17 +181,7 @@ function ProfilePage() {
         return;
       }
       
-      console.log('Calling API with phone:', phone);
-      const response = await userAPI.updatePhone(phone);
-      console.log('API response:', response);
-      console.log('Phone from API response user:', response?.data?.user?.phone);
-      console.log('Phone from API response user type:', typeof response?.data?.user?.phone);
-      
-      // If API response includes updated user, use it immediately
-      if (response?.data?.user) {
-        console.log('Using user from API response');
-        // Note: We can't directly set user state here, but we'll reload
-      }
+      await userAPI.updatePhone(phone);
       
       // Refresh user data to get updated phone - add delay to ensure DB is updated
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -207,7 +193,6 @@ function ProfilePage() {
       toast.success('Phone number updated successfully!');
       setPhoneEdit(false);
     } catch (error) {
-      console.error('Error updating phone:', error);
       const errorMessage = error?.error || error?.details || error?.message || 'Failed to update phone number';
       toast.error(errorMessage);
     } finally {
@@ -460,16 +445,12 @@ function ProfilePage() {
                       e.preventDefault();
                       e.stopPropagation();
                       
-                      console.log('Form onSubmit triggered');
-                      
                       // Get the input element directly
                       const inputElement = e.target.querySelector('input[type="tel"]');
                       const inputValue = inputElement?.value || '';
-                      console.log('Phone input value (direct):', inputValue);
                       
                       // Use handleSubmitPhone but ensure we have the value
                       handleSubmitPhone((data) => {
-                        console.log('handleSubmitPhone callback called with data:', data);
                         // Fallback: if data.phone is empty but input has value, use input value
                         const finalPhone = data?.phone || inputValue || getPhoneValues('phone') || '';
                         if (finalPhone) {
@@ -489,7 +470,6 @@ function ProfilePage() {
                             message: 'Phone is required'
                           },
                           validate: (value) => {
-                            console.log('Validation - value:', value, 'type:', typeof value);
                             if (!value) return 'Phone is required';
                             const trimmed = String(value).trim();
                             if (trimmed.length === 0) {

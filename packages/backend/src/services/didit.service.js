@@ -76,12 +76,6 @@ class DiditService {
 
       const verificationData = response.data;
 
-      // Log complete DIDIT response for debugging
-      console.log('===== DIDIT VERIFICATION RESPONSE =====');
-      console.log('Full Response:', JSON.stringify(verificationData, null, 2));
-      console.log('ID Verification Data:', JSON.stringify(verificationData.id_verification, null, 2));
-      console.log('=========================================');
-
       logger.info('DIDIT response received:', {
         status: verificationData.id_verification?.status,
         requestId: verificationData.request_id,
@@ -101,13 +95,6 @@ class DiditService {
         data: verificationData
       };
     } catch (error) {
-      // Log detailed error information
-      console.log('===== DIDIT API ERROR =====');
-      console.log('Status:', error.response?.status);
-      console.log('Status Text:', error.response?.statusText);
-      console.log('DIDIT Response Data:', JSON.stringify(error.response?.data, null, 2));
-      console.log('===========================');
-      
       logger.error('DIDIT ID verification failed:', {
         message: error.message,
         status: error.response?.status,
@@ -188,12 +175,6 @@ class DiditService {
         }
       };
 
-      console.log('===== GET VERIFICATION STATUS =====');
-      console.log('User ID:', userId);
-      console.log('IsVerified:', statusResponse.isVerified);
-      console.log('Verified Data:', JSON.stringify(statusResponse.verifiedData, null, 2));
-      console.log('Verified Fields:', JSON.stringify(statusResponse.verifiedFields, null, 2));
-      console.log('====================================');
 
       return statusResponse;
     } catch (error) {
@@ -215,13 +196,6 @@ class DiditService {
         throw new Error('Invalid verification data format');
       }
 
-      console.log('===== STORING DIDIT DATA =====');
-      console.log('User ID:', userId);
-      console.log('DOB from DIDIT:', idVerification.date_of_birth);
-      console.log('Age from DIDIT:', idVerification.age);
-      console.log('Gender from DIDIT:', idVerification.gender);
-      console.log('Full Name from DIDIT:', idVerification.full_name);
-      console.log('================================');
 
       // Extract only last 4 digits of document number and encrypt
       const documentLast4 = idVerification.document_number 
@@ -326,12 +300,6 @@ class DiditService {
 
       const updatedUser = await User.findByIdAndUpdate(userId, { $set: updateData }, { new: true });
 
-      console.log('===== DATA STORED IN DATABASE =====');
-      console.log('Stored DOB:', updatedUser.dateOfBirth);
-      console.log('Stored Gender:', updatedUser.gender);
-      console.log('DIDIT Verification Data:', JSON.stringify(updatedUser.diditVerification.verificationData, null, 2));
-      console.log('Verified Fields:', verifiedFields);
-      console.log('====================================');
 
       // Log successful verification
       await AuditLog.logEvent({

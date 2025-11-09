@@ -46,7 +46,7 @@ exports.generateBankPaymentCSV = (distribution, bankDetailsArray) => {
             accountNumber = decrypt(bankDetails.accountNumber) || '';
           }
         } catch (error) {
-          console.error('Error decrypting account number:', error);
+          // Silently handle decryption errors - continue without account number
           accountNumber = '';
         }
 
