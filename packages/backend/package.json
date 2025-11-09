@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node dist/server.js",
-    "build": "babel src --out-dir dist",
+    "build": "npx babel src --out-dir dist",
     "seed:projects": "node scripts/seed-demo-projects.js",
     "fix:indexes": "node scripts/fix-phone-index.js"
   },

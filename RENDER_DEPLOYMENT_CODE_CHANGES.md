@@ -1,7 +1,9 @@
 # Code Changes Required for Render Deployment
 
 ## Summary
-**Only 3 code changes are required** for deploying to Render. Most of your code is already production-ready!
+**4 code changes are required** for deploying to Render. Most of your code is already production-ready!
+
+**Note**: If you encounter a "babel: not found" error during build, the fixes below address that issue.
 
 ---
 
@@ -21,7 +23,39 @@ Create this file in `packages/backend/`:
 
 ---
 
-### 2. Update Admin Frontend Start Script (REQUIRED)
+### 2. Fix Backend Build Script (REQUIRED - Fixes "babel: not found" error)
+**File**: `packages/backend/package.json`
+
+**Current**:
+```json
+"build": "babel src --out-dir dist"
+```
+
+**Change to**:
+```json
+"build": "npx babel src --out-dir dist"
+```
+
+**Why**: Using `npx babel` ensures babel is found in node_modules, even with npm workspaces. This fixes the "babel: not found" error on Render.
+
+**Also update root build script**:
+**File**: `package.json`
+
+**Current**:
+```json
+"build:backend": "cd packages/backend && npm run build"
+```
+
+**Change to**:
+```json
+"build:backend": "cd packages/backend && npm install && npm run build"
+```
+
+**Why**: Ensures backend dependencies (including devDependencies like babel) are installed before building.
+
+---
+
+### 3. Update Admin Frontend Start Script (REQUIRED)
 **File**: `packages/admin-frontend/package.json`
 
 **Current**:
@@ -38,7 +72,7 @@ Create this file in `packages/backend/`:
 
 ---
 
-### 3. Update Frontend Next.js Config (RECOMMENDED)
+### 4. Update Frontend Next.js Config (RECOMMENDED)
 **File**: `packages/frontend/next.config.js`
 
 **Current**:
@@ -85,10 +119,12 @@ images: {
 
 ## Summary
 
-### Changes Required: 3
+### Changes Required: 4
 1. ✅ Create `packages/backend/.babelrc` (NEW FILE)
-2. ✅ Update `packages/admin-frontend/package.json` start script
-3. ✅ Update `packages/frontend/next.config.js` image domains (optional but recommended)
+2. ✅ Update `packages/backend/package.json` build script to use `npx babel`
+3. ✅ Update root `package.json` build:backend script to install dependencies
+4. ✅ Update `packages/admin-frontend/package.json` start script
+5. ✅ Update `packages/frontend/next.config.js` image domains (optional but recommended)
 
 ### No Changes Needed
 - Backend server configuration
@@ -112,9 +148,20 @@ images: {
 ## Quick Checklist
 
 - [ ] Create `packages/backend/.babelrc`
+- [ ] Update `packages/backend/package.json` build script (use `npx babel`)
+- [ ] Update root `package.json` build:backend script (add `npm install`)
 - [ ] Update `packages/admin-frontend/package.json` start script
 - [ ] Update `packages/frontend/next.config.js` image domains
 - [ ] Commit changes to Git
 - [ ] Push to GitHub
 - [ ] Ready to deploy on Render!
+
+## Troubleshooting
+
+### "babel: not found" Error
+If you see this error during build:
+1. Ensure `packages/backend/package.json` uses `npx babel` (not just `babel`)
+2. Ensure root `package.json` build:backend script includes `npm install`
+3. Verify `.babelrc` file exists in `packages/backend/`
+4. Check that `@babel/cli` is in backend's devDependencies
 
