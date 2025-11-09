@@ -15,7 +15,7 @@ require("dotenv").config({
 
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
-const { connectDB } = require('./config/database');
+const { connectDB, getConnectionStatus } = require('./config/database');
 
 // Passport config
 require('./config/passport')(passport);
@@ -100,32 +100,54 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Express session
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-  })
-);
+// Note: MemoryStore is not suitable for production with multiple instances
+// For production, consider using MongoDB session store or Redis
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+};
+
+// Suppress MemoryStore warning in production if using a single instance
+// For multi-instance deployments, use MongoDB store or Redis
+if (process.env.NODE_ENV === 'production') {
+  // In production with single instance, MemoryStore is acceptable
+  // For multi-instance, configure MongoDBStore or RedisStore
+  sessionConfig.name = 'sessionId'; // Custom session name
+}
+
+app.use(session(sessionConfig));
 
 // Passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB (non-blocking - server will start even if DB fails)
+connectDB().catch(err => {
+  logger.error('Initial database connection failed:', err.message);
+  logger.warn('Server will start without database connection. Health check will show DB status.');
+});
 
-// Health check
+// Health check with database status
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  const dbStatus = getConnectionStatus();
+  const health = {
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
-  });
+    environment: process.env.NODE_ENV,
+    database: {
+      connected: dbStatus.connected,
+      readyState: dbStatus.readyState,
+      host: dbStatus.host
+    }
+  };
+  
+  // Return 200 even if DB is disconnected (server is still running)
+  res.json(health);
 });
 
 // API Routes
@@ -163,6 +185,21 @@ app.listen(PORT, () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Rejection:', err);
+  // Don't exit in production - log and continue
+  // Exit only in development for faster debugging
+  if (process.env.NODE_ENV !== 'production') {
+    logger.error('Exiting due to unhandled rejection in development mode');
+    process.exit(1);
+  } else {
+    logger.error('Unhandled rejection in production - server will continue running');
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', err);
+  // Always exit on uncaught exceptions as they indicate serious issues
+  logger.error('Exiting due to uncaught exception');
   process.exit(1);
 });
 
