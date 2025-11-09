@@ -45,10 +45,21 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 
 // CORS configuration
-const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  process.env.ADMIN_FRONTEND_URL || 'http://localhost:3001'
-];
+const allowedOrigins = [];
+
+// Add production URLs from environment variables
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+if (process.env.ADMIN_FRONTEND_URL) {
+  allowedOrigins.push(process.env.ADMIN_FRONTEND_URL);
+}
+
+// In development, always allow localhost origins
+// In production, only allow the URLs specified in environment variables
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.push('http://localhost:3000', 'http://localhost:3001');
+}
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -58,6 +69,10 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // Log rejected origin for debugging (only in development)
+      if (process.env.NODE_ENV !== 'production') {
+        logger.warn(`CORS: Rejected origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
+      }
       callback(new Error('Not allowed by CORS'));
     }
   },
