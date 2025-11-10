@@ -2,7 +2,8 @@ import { FaGoogle } from 'react-icons/fa';
 
 export default function GoogleLoginButton() {
   const handleGoogleLogin = () => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:5000';
+  // Use the shared public API base env var. Keep backward-compatible fallback.
+  const API_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1').replace('/api/v1', '');
     const ADMIN_URL = window.location.origin; // Get current admin console URL
     
     // Store that this is an admin login attempt
@@ -14,7 +15,7 @@ export default function GoogleLoginButton() {
       redirectUrl: ADMIN_URL 
     }));
     
-    window.location.href = `${API_URL}/api/v1/auth/google?state=${state}`;
+  window.location.href = `${API_URL}/api/v1/auth/google?state=${state}`;
   };
 
   return (

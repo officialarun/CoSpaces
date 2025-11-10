@@ -1,4 +1,16 @@
-# Dependencies
+node_modules/
+/.next
+packages/*/.next
+dist/
+env.local
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+coverage/
+*.log# Dependencies
 node_modules/
 packages/*/node_modules/
 
