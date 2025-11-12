@@ -846,51 +846,143 @@ exports.resendVerification = async (req, res, next) => {
   }
 };
 
+// // Google OAuth callback
+// exports.googleCallback = async (req, res) => {
+//   try {
+//     // User is authenticated via passport
+//     const user = req.user;
+
+//     // Generate JWT token
+//     const token = generateToken(user._id);
+//     const refreshToken = generateRefreshToken(user._id);
+
+//     // Log audit event
+//     await AuditLog.logEvent({
+//       eventType: 'user_login',
+//       eventCategory: 'authentication',
+//       severity: 'info',
+//       performedBy: user._id,
+//       performedByEmail: user.email,
+//       performedByRole: user.role,
+//       action: 'User logged in via Google OAuth',
+//       request: {
+//         ipAddress: req.ip,
+//         userAgent: req.get('user-agent')
+//       }
+//     });
+
+//     // Determine redirect URL based on state parameter
+//     let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+    
+//     try {
+//       if (req.query.state) {
+//         const state = JSON.parse(decodeURIComponent(req.query.state));
+//         if (state.isAdmin && state.redirectUrl) {
+//           redirectURL = state.redirectUrl;
+//         }
+//       }
+//     } catch (error) {
+//       logger.warn('Failed to parse OAuth state parameter:', error);
+//     }
+
+//     // Redirect to frontend with token
+//     res.redirect(`${redirectURL}/auth/callback?token=${token}&refreshToken=${refreshToken}`);
+//   } catch (error) {
+//     logger.error('Google OAuth callback error:', error);
+    
+//     // Determine error redirect URL
+//     let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
+//     try {
+//       if (req.query.state) {
+//         const state = JSON.parse(decodeURIComponent(req.query.state));
+//         if (state.isAdmin && state.redirectUrl) {
+//           redirectURL = state.redirectUrl;
+//         }
+//       }
+//     } catch (err) {
+//       // Use default URL
+//     }
+    
+//     res.redirect(`${redirectURL}/login?error=oauth_failed`);
+//   }
+// };
+
 // Google OAuth callback
 exports.googleCallback = async (req, res) => {
+  logger.info('🟢 Google OAuth callback triggered');
+  
   try {
-    // User is authenticated via passport
+    // 1️⃣ Check if Passport attached the user
+    if (!req.user) {
+      logger.error('❌ Google OAuth callback: req.user is undefined');
+      throw new Error('User object missing in OAuth callback');
+    }
+
     const user = req.user;
+    logger.info(`✅ OAuth user received: ${user.email} (ID: ${user._id})`);
 
-    // Generate JWT token
-    const token = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    // 2️⃣ Generate tokens
+    let token, refreshToken;
+    try {
+      token = generateToken(user._id);
+      refreshToken = generateRefreshToken(user._id);
+      logger.info(`🔐 Tokens generated successfully for ${user.email}`);
+    } catch (err) {
+      logger.error('❌ Error generating JWT/refresh tokens:', err);
+      throw err;
+    }
 
-    // Log audit event
-    await AuditLog.logEvent({
-      eventType: 'user_login',
-      eventCategory: 'authentication',
-      severity: 'info',
-      performedBy: user._id,
-      performedByEmail: user.email,
-      performedByRole: user.role,
-      action: 'User logged in via Google OAuth',
-      request: {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      }
-    });
+    // 3️⃣ Log audit event
+    try {
+      await AuditLog.logEvent({
+        eventType: 'user_login',
+        eventCategory: 'authentication',
+        severity: 'info',
+        performedBy: user._id,
+        performedByEmail: user.email,
+        performedByRole: user.role,
+        action: 'User logged in via Google OAuth',
+        request: {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        },
+      });
+      logger.info(`📝 Audit event logged for user ${user.email}`);
+    } catch (err) {
+      logger.warn('⚠️ Failed to log audit event:', err);
+    }
 
-    // Determine redirect URL based on state parameter
+    // 4️⃣ Determine redirect URL
     let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
-    
+    logger.info(`🌐 Default redirect URL: ${redirectURL}`);
+
     try {
       if (req.query.state) {
         const state = JSON.parse(decodeURIComponent(req.query.state));
+        logger.info('📦 OAuth state parameter:', state);
+
         if (state.isAdmin && state.redirectUrl) {
           redirectURL = state.redirectUrl;
+          logger.info(`🔁 Overriding redirect URL with state.redirectUrl: ${redirectURL}`);
         }
       }
     } catch (error) {
-      logger.warn('Failed to parse OAuth state parameter:', error);
+      logger.warn('⚠️ Failed to parse OAuth state parameter:', error);
     }
 
-    // Redirect to frontend with token
+    // 5️⃣ Redirect to frontend
+    logger.info(`🚀 Redirecting user to: ${redirectURL}/auth/callback`);
     res.redirect(`${redirectURL}/auth/callback?token=${token}&refreshToken=${refreshToken}`);
+
   } catch (error) {
-    logger.error('Google OAuth callback error:', error);
-    
-    // Determine error redirect URL
+    logger.error('🔥 Google OAuth callback caught error:', {
+      message: error.message,
+      stack: error.stack,
+      query: req.query,
+      body: req.body,
+    });
+
+    // Fallback redirect URL
     let redirectURL = process.env.FRONTEND_URL || 'http://localhost:3000';
     try {
       if (req.query.state) {
@@ -900,10 +992,10 @@ exports.googleCallback = async (req, res) => {
         }
       }
     } catch (err) {
-      // Use default URL
+      // ignore
     }
-    
+
+    // Redirect with error message (optional: include safe short code)
     res.redirect(`${redirectURL}/login?error=oauth_failed`);
   }
 };
-
