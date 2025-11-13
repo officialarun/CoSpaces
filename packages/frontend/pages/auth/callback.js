@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../lib/auth';
 import { authAPI } from '../../lib/api';
+import { getRedirectPath } from '../../lib/redirectHelper';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -35,17 +36,20 @@ export default function AuthCallback() {
 
           toast.success('Successfully logged in with Google!');
           
-          // Redirect based on onboarding status
-          if (!user.onboardingCompleted) {
-            const onboardingStep = user.onboardingStep || 0;
-            if (onboardingStep === 0) {
-              router.push('/onboarding/step1');
-            } else if (onboardingStep === 1) {
-              router.push('/onboarding/step2');
+          // Redirect based on role and onboarding status
+          const redirectPath = getRedirectPath(user);
+          
+          // For admin role, redirect to admin frontend
+          if (user.role === 'admin') {
+            // Admin frontend runs on port 3001
+            if (typeof window !== 'undefined') {
+              const adminUrl = window.location.origin.replace(':3000', ':3001') + '/dashboard?tab=users';
+              window.location.href = adminUrl;
+              return;
             }
-          } else {
-            router.push('/dashboard');
           }
+          
+          router.push(redirectPath);
         } catch (err) {
           console.error('Failed to fetch user:', err);
           toast.error('Failed to complete authentication. Please try again.');

@@ -49,11 +49,6 @@ export default function NotFound() {
                   → View My Investments
                 </Link>
               </li>
-              <li>
-                <Link href="/dashboard/subscriptions" className="text-primary-600 hover:text-primary-700">
-                  → Check Subscription Status
-                </Link>
-              </li>
             </ul>
           </div>
         </div>

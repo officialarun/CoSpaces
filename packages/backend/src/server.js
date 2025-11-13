@@ -5,11 +5,17 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const passport = require('passport');
-require('dotenv').config();
+// require('dotenv').config();
+require("dotenv").config({
+  path: process.env.NODE_ENV === "production"
+    ? ".env.production"
+    : ".env"
+});
+
 
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
-const { connectDB } = require('./config/database');
+const { connectDB, getConnectionStatus } = require('./config/database');
 
 // Passport config
 require('./config/passport')(passport);
@@ -20,7 +26,6 @@ const userRoutes = require('./routes/user.routes');
 const kycRoutes = require('./routes/kyc.routes');
 const projectRoutes = require('./routes/project.routes');
 const spvRoutes = require('./routes/spv.routes');
-const subscriptionRoutes = require('./routes/subscription.routes');
 const escrowRoutes = require('./routes/escrow.routes');
 const documentRoutes = require('./routes/document.routes');
 const complianceRoutes = require('./routes/compliance.routes');
@@ -30,6 +35,8 @@ const reportRoutes = require('./routes/report.routes');
 const diditRoutes = require('./routes/didit.routes');
 const adminRoutes = require('./routes/admin.routes');
 const paymentRoutes = require('./routes/payment.routes');
+const esignRoutes = require('./routes/esign.routes');
+const bankPaymentRoutes = require('./routes/bankPayment.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,10 +45,21 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 
 // CORS configuration
-const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  process.env.ADMIN_FRONTEND_URL || 'http://localhost:3001'
-];
+const allowedOrigins = [];
+
+// Add production URLs from environment variables
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
+if (process.env.ADMIN_FRONTEND_URL) {
+  allowedOrigins.push(process.env.ADMIN_FRONTEND_URL);
+}
+
+// In development, always allow localhost origins
+// In production, only allow the URLs specified in environment variables
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.push('http://localhost:3000', 'http://localhost:3001');
+}
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -51,6 +69,10 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // Log rejected origin for debugging (only in development)
+      if (process.env.NODE_ENV !== 'production') {
+        logger.warn(`CORS: Rejected origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
+      }
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -78,32 +100,54 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Express session
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-  })
-);
+// Note: MemoryStore is not suitable for production with multiple instances
+// For production, consider using MongoDB session store or Redis
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+};
+
+// Suppress MemoryStore warning in production if using a single instance
+// For multi-instance deployments, use MongoDB store or Redis
+if (process.env.NODE_ENV === 'production') {
+  // In production with single instance, MemoryStore is acceptable
+  // For multi-instance, configure MongoDBStore or RedisStore
+  sessionConfig.name = 'sessionId'; // Custom session name
+}
+
+app.use(session(sessionConfig));
 
 // Passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB (non-blocking - server will start even if DB fails)
+connectDB().catch(err => {
+  logger.error('Initial database connection failed:', err.message);
+  logger.warn('Server will start without database connection. Health check will show DB status.');
+});
 
-// Health check
+// Health check with database status
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  const dbStatus = getConnectionStatus();
+  const health = {
+    status: 'OK',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
-  });
+    environment: process.env.NODE_ENV,
+    database: {
+      connected: dbStatus.connected,
+      readyState: dbStatus.readyState,
+      host: dbStatus.host
+    }
+  };
+  
+  // Return 200 even if DB is disconnected (server is still running)
+  res.json(health);
 });
 
 // API Routes
@@ -113,7 +157,6 @@ app.use(`/api/${API_VERSION}/users`, userRoutes);
 app.use(`/api/${API_VERSION}/kyc`, kycRoutes);
 app.use(`/api/${API_VERSION}/projects`, projectRoutes);
 app.use(`/api/${API_VERSION}/spv`, spvRoutes);
-app.use(`/api/${API_VERSION}/subscriptions`, subscriptionRoutes);
 app.use(`/api/${API_VERSION}/escrow`, escrowRoutes);
 app.use(`/api/${API_VERSION}/documents`, documentRoutes);
 app.use(`/api/${API_VERSION}/compliance`, complianceRoutes);
@@ -123,6 +166,8 @@ app.use(`/api/${API_VERSION}/reports`, reportRoutes);
 app.use(`/api/${API_VERSION}/didit`, diditRoutes);
 app.use(`/api/${API_VERSION}/admin`, adminRoutes);
 app.use(`/api/${API_VERSION}/payments`, paymentRoutes);
+app.use(`/api/${API_VERSION}/esign`, esignRoutes);
+app.use(`/api/${API_VERSION}/bank-payments`, bankPaymentRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -140,6 +185,21 @@ app.listen(PORT, () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Rejection:', err);
+  // Don't exit in production - log and continue
+  // Exit only in development for faster debugging
+  if (process.env.NODE_ENV !== 'production') {
+    logger.error('Exiting due to unhandled rejection in development mode');
+    process.exit(1);
+  } else {
+    logger.error('Unhandled rejection in production - server will continue running');
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', err);
+  // Always exit on uncaught exceptions as they indicate serious issues
+  logger.error('Exiting due to uncaught exception');
   process.exit(1);
 });
 

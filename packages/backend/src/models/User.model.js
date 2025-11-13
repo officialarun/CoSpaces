@@ -306,9 +306,22 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Ensure phone nulls are not persisted (so they don't get indexed as null)
+userSchema.pre('save', function(next) {
+  if (this.isModified('phone') && this.phone === null) {
+    this.phone = undefined;
+  }
+  next();
+});
+
 // Indexes
 // Note: email has unique: true in field definition
-userSchema.index({ phone: 1 }, { unique: true, sparse: true }); // Unique sparse index for OAuth users
+// Replace sparse unique index with partialFilterExpression to ignore null values
+userSchema.index(
+  { phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $exists: true, $ne: null } } }
+); // Unique index only for non-null phones
+
 userSchema.index({ role: 1 });
 userSchema.index({ kycStatus: 1 });
 userSchema.index({ amlStatus: 1 });

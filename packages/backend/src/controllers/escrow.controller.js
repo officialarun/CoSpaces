@@ -1,22 +1,14 @@
 const SPV = require('../models/SPV.model');
-const Subscription = require('../models/Subscription.model');
 
 exports.handleDepositWebhook = async (req, res, next) => {
   try {
-    const { transactionId, amount, spvId, subscriptionId } = req.body;
+    const { transactionId, amount, spvId } = req.body;
     
     // Verify webhook signature (implementation depends on payment gateway)
     // TODO: Verify webhook signature
     
-    if (subscriptionId) {
-      await Subscription.findByIdAndUpdate(subscriptionId, {
-        $set: {
-          'payment.escrowTransactionId': transactionId,
-          'payment.escrowDepositDate': new Date(),
-          status: 'payment_processing'
-        }
-      });
-    }
+    // Escrow deposit handling - payment is processed via Razorpay directly
+    // No subscription flow, so webhook is primarily for tracking
     
     res.json({ success: true, message: 'Webhook processed' });
   } catch (error) {
@@ -65,14 +57,10 @@ exports.releaseEscrow = async (req, res, next) => {
 
 exports.refundEscrow = async (req, res, next) => {
   try {
-    const { subscriptionId, reason } = req.body;
-    
-    const subscription = await Subscription.findById(subscriptionId);
+    const { paymentId, reason } = req.body;
     
     // In production, call escrow bank API for refund
-    
-    subscription.cancellation.refundStatus = 'initiated';
-    await subscription.save();
+    // Refunds are handled via Razorpay refund API
     
     res.json({ success: true, message: 'Refund initiated' });
   } catch (error) {

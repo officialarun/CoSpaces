@@ -55,9 +55,19 @@ export const userAPI = {
   getProfile: () => api.get('/users/profile'),
   updateProfile: (data) => api.put('/users/profile', data),
   updatePhone: (phone) => api.put('/users/phone', { phone }),
-  updateBankDetails: (data) => api.put('/users/bank-details', data),
+  // Bank Details APIs
+  addBankDetails: (data) => api.post('/users/bank-details', data),
+  getBankDetails: () => api.get('/users/bank-details'),
+  updateBankDetails: (bankDetailsId, data) => api.put(`/users/bank-details/${bankDetailsId}`, data),
+  deleteBankDetails: (bankDetailsId) => api.delete(`/users/bank-details/${bankDetailsId}`),
+  setPrimaryBank: (bankDetailsId) => api.put(`/users/bank-details/${bankDetailsId}/primary`),
   updateOnboardingStep1: (data) => api.put('/users/onboarding/step1', data),
   updateOnboardingStep2: (data) => api.put('/users/onboarding/step2', data),
+};
+
+// Bank Payment APIs
+export const bankPaymentAPI = {
+  getPaymentHistory: (userId) => api.get(`/bank-payments/history/${userId}`),
 };
 
 // DIDIT APIs
@@ -104,20 +114,17 @@ export const spvAPI = {
   createSPV: (data) => api.post('/spv', data),
 };
 
-// Subscription APIs
-export const subscriptionAPI = {
-  createSubscription: (data) => api.post('/subscriptions', data),
-  getMySubscriptions: () => api.get('/subscriptions/my-subscriptions'),
-  getSubscriptionById: (id) => api.get(`/subscriptions/${id}`),
-  signDocuments: (id, data) => api.post(`/subscriptions/${id}/sign-documents`, data),
-  uploadPaymentProof: (id, data) => api.post(`/subscriptions/${id}/upload-payment-proof`, data),
-  cancelSubscription: (id, reason) => api.put(`/subscriptions/${id}/cancel`, { reason }),
-};
-
 // Distribution APIs
 export const distributionAPI = {
   getMyDistributions: () => api.get('/distributions/my-distributions'),
   getDistributionById: (id) => api.get(`/distributions/${id}`),
+  // Asset Manager APIs
+  getDistributionsByAssetManager: (assetManagerId) => api.get(`/distributions/by-asset-manager/${assetManagerId}`),
+  approveAsAssetManager: (id, comments) => api.put(`/distributions/${id}/approve/asset-manager`, { comments }),
+  // Compliance Officer APIs
+  approveAsCompliance: (id, comments) => api.put(`/distributions/${id}/approve/compliance`, { comments }),
+  // Admin can also use these
+  getAllDistributions: (params) => api.get('/distributions', { params }),
 };
 
 // Report APIs
@@ -131,6 +138,26 @@ export const reportAPI = {
 export const complianceAPI = {
   checkInvestorEligibility: (spvId) => api.post('/compliance/check-investor-eligibility', { spvId }),
   getComplianceDashboard: () => api.get('/compliance/dashboard'),
+};
+
+// SHA/eSign APIs
+export const shaAPI = {
+  getMyAgreements: () => api.get('/esign/sha/my-agreements'),
+  getPendingAgreements: () => api.get('/esign/sha/pending'),
+  getAgreementById: (agreementId) => api.get(`/esign/sha/${agreementId}`),
+  getSHAStatus: (agreementId) => api.get(`/esign/sha/${agreementId}/status`),
+  initiateSHA: (agreementId) => api.post(`/esign/sha/${agreementId}/initiate`),
+  mockSignSHA: (agreementId) => api.post(`/esign/sha/${agreementId}/mock-sign`),
+};
+
+// Asset Manager APIs
+export const assetManagerAPI = {
+  getMyProjects: () => api.get('/projects?assetManager=true'),
+  getDistributionsForMyProjects: () => {
+    // This will need to use the user's ID from auth context
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    return api.get(`/distributions/by-asset-manager/${user._id}`);
+  },
 };
 
 export default api;

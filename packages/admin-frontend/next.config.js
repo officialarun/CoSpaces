@@ -6,7 +6,8 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/:path*',
+        // Use shared env var name for consistency. Keep fallback to previous var.
+        destination: process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/:path*',
       },
     ];
   },

@@ -211,7 +211,8 @@ const kycSchema = new mongoose.Schema({
 });
 
 // Indexes
-kycSchema.index({ user: 1 });
+// Note: user field has unique: true in schema definition, which automatically creates an index
+// No need to explicitly create index({ user: 1 }) - that would create a duplicate
 kycSchema.index({ verificationStatus: 1 });
 kycSchema.index({ 'amlScreening.riskLevel': 1 });
 

@@ -26,6 +26,14 @@ router.delete('/users/:id', adminController.deactivateUser);
 // Get user onboarding status
 router.get('/users/:id/onboarding-status', adminController.getUserOnboardingStatus);
 
+// ==================== STAFF MANAGEMENT ROUTES ====================
+
+// Get all staff members
+router.get('/staff', adminController.getAllStaff);
+
+// Create staff member
+router.post('/staff/create', adminController.createStaff);
+
 // ==================== PROJECT MANAGEMENT ROUTES ====================
 
 // Get all projects (all statuses)
@@ -77,6 +85,9 @@ router.delete('/spvs/:id', adminController.deleteSPV);
 
 // Assign SPV to project
 router.post('/projects/:projectId/assign-spv', adminController.assignSPVToProject);
+
+// Assign Asset Manager to project
+router.post('/projects/:projectId/assign-asset-manager', adminController.assignAssetManagerToProject);
 
 // ==================== KYC MANAGEMENT ROUTES ====================
 

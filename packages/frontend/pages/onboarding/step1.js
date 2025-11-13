@@ -55,8 +55,6 @@ export default function OnboardingStep1() {
   }, [user]);
 
   const loadExistingUserData = () => {
-    console.log('📥 Loading existing user data...');
-    
     // Pre-fill form with existing user data
     setFormData(prev => ({
       occupation: user.professionalDetails?.occupation || prev.occupation,
@@ -75,8 +73,6 @@ export default function OnboardingStep1() {
         country: user.address?.country || 'India'
       }
     }));
-    
-    console.log('✅ User data loaded into form');
   };
 
   const checkVerificationStatus = async () => {
@@ -84,27 +80,18 @@ export default function OnboardingStep1() {
 
     try {
       const response = await diditAPI.getVerificationStatus();
-      console.log('🔍 DIDIT Status Response:', response);
-      console.log('🔍 Raw response.data:', response.data);
       
       // Since axios interceptor returns response.data, we access .data directly
       const statusData = response.data || response;
       const { isVerified: verified, verifiedData, verifiedFields: apiVerifiedFields } = statusData;
-      
-      console.log('✅ Verified:', verified);
-      console.log('📋 Verified Data:', verifiedData);
-      console.log('🔐 Verified Fields from API:', apiVerifiedFields);
-      console.log('🔐 Full statusData:', statusData);
       
       setIsVerified(verified);
       
       // Update which fields are verified
       // If verifiedFields is missing, build it from verifiedData
       if (apiVerifiedFields) {
-        console.log('✅ Using API verifiedFields');
         setVerifiedFields(apiVerifiedFields);
       } else if (verifiedData) {
-        console.log('⚠️ verifiedFields missing, building from verifiedData');
         // Fallback: construct verifiedFields from available data
         const constructedFields = {
           dob: !!verifiedData.dob,
@@ -120,13 +107,10 @@ export default function OnboardingStep1() {
             country: !!verifiedData.address?.country
           }
         };
-        console.log('🔧 Constructed verifiedFields:', constructedFields);
         setVerifiedFields(constructedFields);
       }
 
       if (verified && verifiedData) {
-        console.log('🎯 Merging verified data with form...');
-        
         // Use constructed or API-provided verifiedFields
         const fieldsToUse = apiVerifiedFields || {
           dob: !!verifiedData.dob,
@@ -140,8 +124,6 @@ export default function OnboardingStep1() {
           }
         };
         
-        console.log('🔧 Using verifiedFields:', fieldsToUse);
-        
         // Merge verified data with existing form data
         setFormData(prev => {
           const newFormData = { ...prev };
@@ -149,7 +131,6 @@ export default function OnboardingStep1() {
           // DOB - only if verified and present
           if (fieldsToUse.dob && verifiedData.dob) {
             newFormData.dateOfBirth = new Date(verifiedData.dob).toISOString().split('T')[0];
-            console.log('✅ Set DOB from verification:', newFormData.dateOfBirth);
           }
           
           // Gender - only if verified and present
@@ -164,52 +145,34 @@ export default function OnboardingStep1() {
               'Other': 'other'
             };
             newFormData.gender = genderMap[verifiedData.gender] || verifiedData.gender.toLowerCase();
-            console.log('✅ Set Gender from verification:', newFormData.gender);
           }
           
           // Address fields - only override verified ones
           if (verifiedData.address) {
             if (fieldsToUse.address?.street && verifiedData.address.street) {
               newFormData.address.street = verifiedData.address.street;
-              console.log('✅ Set Street from verification');
             }
             if (fieldsToUse.address?.city && verifiedData.address.city) {
               newFormData.address.city = verifiedData.address.city;
-              console.log('✅ Set City from verification');
             }
             if (fieldsToUse.address?.state && verifiedData.address.state) {
               newFormData.address.state = verifiedData.address.state;
-              console.log('✅ Set State from verification');
             }
             if (fieldsToUse.address?.pincode && verifiedData.address.pincode) {
               newFormData.address.pincode = verifiedData.address.pincode;
-              console.log('✅ Set Pincode from verification');
             }
             if (fieldsToUse.address?.country && verifiedData.address.country) {
               newFormData.address.country = verifiedData.address.country;
-              console.log('✅ Set Country from verification');
             }
           }
           
-          console.log('📝 Final merged form data:', newFormData);
           return newFormData;
         });
         
         setShowDIDIT(false); // Hide DIDIT card if already verified
-        
-        // Count verified fields for user feedback
-        let verifiedCount = 0;
-        if (fieldsToUse.dob) verifiedCount++;
-        if (fieldsToUse.gender) verifiedCount++;
-        if (fieldsToUse.address?.street) verifiedCount++;
-        if (fieldsToUse.address?.city) verifiedCount++;
-        if (fieldsToUse.address?.state) verifiedCount++;
-        if (fieldsToUse.address?.pincode) verifiedCount++;
-        
-        console.log(`✅ ${verifiedCount} field(s) verified and locked`);
       }
     } catch (err) {
-      console.error('❌ Error checking verification status:', err);
+      // Silently handle verification status errors
     }
   };
 

@@ -1,6 +1,5 @@
 const User = require('../models/User.model');
 const SPV = require('../models/SPV.model');
-const Subscription = require('../models/Subscription.model');
 
 exports.checkInvestorEligibility = async (req, res, next) => {
   try {
@@ -132,10 +131,6 @@ exports.getComplianceDashboard = async (req, res, next) => {
     const kycApproved = await User.countDocuments({ kycStatus: 'approved' });
     const amlFlagged = await User.countDocuments({ amlStatus: 'flagged' });
     
-    const subscriptionsPendingApproval = await Subscription.countDocuments({
-      status: 'under_review'
-    });
-    
     const spvs = await SPV.find({});
     const spvsNearInvestorLimit = spvs.filter(
       spv => spv.fundraising.investorCount >= spv.fundraising.maxInvestors * 0.9
@@ -144,7 +139,6 @@ exports.getComplianceDashboard = async (req, res, next) => {
     const dashboard = {
       kyc: { pending: kycPending, approved: kycApproved },
       aml: { flagged: amlFlagged },
-      subscriptions: { pendingApproval: subscriptionsPendingApproval },
       spvs: { nearInvestorLimit: spvsNearInvestorLimit }
     };
     

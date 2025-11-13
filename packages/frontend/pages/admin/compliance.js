@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { ProtectedRoute } from '../../lib/auth';
 import DashboardLayout from '../../components/DashboardLayout';
-import { complianceAPI, kycAPI, subscriptionAPI } from '../../lib/api';
+import { complianceAPI, kycAPI } from '../../lib/api';
 import { FaCheckCircle, FaExclamationTriangle, FaUsers, FaFileAlt } from 'react-icons/fa';
 
 function ComplianceDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [pendingKYC, setPendingKYC] = useState([]);
-  const [pendingSubscriptions, setPendingSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,15 +16,13 @@ function ComplianceDashboard() {
 
   const loadComplianceData = async () => {
     try {
-      const [dashboardRes, kycRes, subsRes] = await Promise.all([
+      const [dashboardRes, kycRes] = await Promise.all([
         complianceAPI.getComplianceDashboard(),
-        kycAPI.getAllKYC({ status: 'submitted', limit: 10 }),
-        subscriptionAPI.getAllSubscriptions({ status: 'under_review', limit: 10 })
+        kycAPI.getAllKYC({ status: 'submitted', limit: 10 })
       ]);
 
       setDashboard(dashboardRes.data.dashboard);
       setPendingKYC(kycRes.data.kycs);
-      setPendingSubscriptions(subsRes.data.subscriptions);
     } catch (error) {
       console.error('Error loading compliance data:', error);
     } finally {
@@ -91,17 +88,6 @@ function ComplianceDashboard() {
               </div>
             </div>
 
-            <div className="card">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Pending Subscriptions</p>
-                  <p className="text-2xl font-bold text-blue-600">
-                    {dashboard?.subscriptions?.pendingApproval || 0}
-                  </p>
-                </div>
-                <FaUsers className="text-blue-600 text-3xl" />
-              </div>
-            </div>
           </div>
 
           {/* Pending KYC Reviews */}
@@ -148,53 +134,6 @@ function ComplianceDashboard() {
             </div>
           </div>
 
-          {/* Pending Subscription Reviews */}
-          <div className="card">
-            <h2 className="text-xl font-bold mb-4">Pending Subscription Reviews</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subscription #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Investor</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SPV</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {pendingSubscriptions.map((sub) => (
-                    <tr key={sub._id}>
-                      <td className="px-4 py-4 whitespace-nowrap font-medium">
-                        {sub.subscriptionNumber}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <div className="text-gray-900">
-                          {sub.investor?.firstName} {sub.investor?.lastName}
-                        </div>
-                        <div className="text-sm text-gray-500">{sub.investor?.email}</div>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        {sub.spv?.spvName}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        ₹{sub.committedAmount.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <span className="badge badge-warning">{sub.status}</span>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap">
-                        <a href={`/admin/subscriptions/${sub._id}`} className="text-primary-600 hover:text-primary-700">
-                          Review
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       </DashboardLayout>
     </>

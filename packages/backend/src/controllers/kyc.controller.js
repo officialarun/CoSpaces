@@ -2,6 +2,8 @@ const KYC = require('../models/KYC.model');
 const User = require('../models/User.model');
 const AuditLog = require('../models/AuditLog.model');
 const { encrypt } = require('../utils/encryption');
+const notificationController = require('./notification.controller');
+const logger = require('../utils/logger');
 
 exports.submitKYC = async (req, res, next) => {
   try {
@@ -19,7 +21,33 @@ exports.submitKYC = async (req, res, next) => {
         kycData.individualKYC.aadhaarNumber = encrypt(req.body.individualKYC.aadhaarNumber);
       }
       if (req.body.individualKYC.panNumber) {
-        kycData.individualKYC.panNumber = encrypt(req.body.individualKYC.panNumber);
+        // Convert PAN to uppercase before encryption (defensive measure)
+        kycData.individualKYC.panNumber = encrypt(String(req.body.individualKYC.panNumber).toUpperCase().trim());
+      }
+    }
+    
+    // Handle entityKYC PAN fields as well
+    if (req.body.entityKYC) {
+      if (req.body.entityKYC.pan) {
+        kycData.entityKYC.pan = encrypt(String(req.body.entityKYC.pan).toUpperCase().trim());
+      }
+      // Handle directors' PAN numbers
+      if (req.body.entityKYC.directors && Array.isArray(req.body.entityKYC.directors)) {
+        kycData.entityKYC.directors = req.body.entityKYC.directors.map(director => ({
+          ...director,
+          panNumber: director.panNumber ? encrypt(String(director.panNumber).toUpperCase().trim()) : director.panNumber
+        }));
+      }
+      // Handle beneficial owners' PAN numbers
+      if (req.body.entityKYC.beneficialOwners && Array.isArray(req.body.entityKYC.beneficialOwners)) {
+        kycData.entityKYC.beneficialOwners = req.body.entityKYC.beneficialOwners.map(owner => ({
+          ...owner,
+          panNumber: owner.panNumber ? encrypt(String(owner.panNumber).toUpperCase().trim()) : owner.panNumber
+        }));
+      }
+      // Handle authorized signatory PAN
+      if (req.body.entityKYC.authorizedSignatory?.panNumber) {
+        kycData.entityKYC.authorizedSignatory.panNumber = encrypt(String(req.body.entityKYC.authorizedSignatory.panNumber).toUpperCase().trim());
       }
     }
     
@@ -40,6 +68,11 @@ exports.submitKYC = async (req, res, next) => {
       action: 'KYC submitted',
       request: { ipAddress: req.ip }
     });
+    
+    // Send KYC submitted email (non-blocking)
+    notificationController.sendKYCEmail(req.user, 'submitted').catch(err =>
+      logger.error('Failed to send KYC submitted email', { userId: req.user._id, error: err.message })
+    );
     
     res.json({ success: true, data: { kyc } });
   } catch (error) {
@@ -161,6 +194,14 @@ exports.approveKYC = async (req, res, next) => {
       description: comments
     });
     
+    // Send KYC approved email (non-blocking)
+    const user = await User.findById(req.params.userId);
+    if (user) {
+      notificationController.sendKYCEmail(user, 'approved').catch(err =>
+        logger.error('Failed to send KYC approved email', { userId: user._id, error: err.message })
+      );
+    }
+    
     res.json({ success: true, data: { kyc } });
   } catch (error) {
     next(error);
@@ -195,6 +236,14 @@ exports.rejectKYC = async (req, res, next) => {
       action: 'KYC rejected',
       description: `${reason}: ${details}`
     });
+    
+    // Send KYC rejected email (non-blocking)
+    const user = await User.findById(req.params.userId);
+    if (user) {
+      notificationController.sendKYCEmail(user, 'rejected', reason).catch(err =>
+        logger.error('Failed to send KYC rejected email', { userId: user._id, error: err.message })
+      );
+    }
     
     res.json({ success: true, data: { kyc } });
   } catch (error) {

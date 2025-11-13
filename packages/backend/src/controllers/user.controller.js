@@ -34,36 +34,192 @@ exports.updateProfile = async (req, res, next) => {
 
 exports.updatePhone = async (req, res, next) => {
   try {
-    const { phone } = req.body;
+    const logger = require('../utils/logger');
+    const phone = req.body.phone?.trim();
     
-    if (!phone) {
+    // Validate phone number
+    if (!phone || phone.length === 0) {
       return res.status(400).json({ error: 'Phone number is required' });
     }
     
-    // Check if phone already exists
-    const existingUser = await User.findOne({ phone, _id: { $ne: req.user._id } });
+    // Convert to string and trim - do this early so we can use phoneValue consistently
+    const phoneValue = String(phone).trim();
+    
+    // Check if phone already exists (use phoneValue for consistency)
+    const existingUser = await User.findOne({ phone: phoneValue, _id: { $ne: req.user._id } });
     if (existingUser) {
       return res.status(400).json({ error: 'Phone number already in use' });
     }
     
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { 
-        $set: { 
-          phone,
-          isPhoneVerified: false, // Will be verified via OTP
-          updatedBy: req.user._id 
+    // Update phone number using findByIdAndUpdate with explicit phone value
+    let updateResult;
+    try {
+      updateResult = await User.findByIdAndUpdate(
+        req.user._id,
+        { 
+          $set: { 
+            phone: phoneValue,
+            isPhoneVerified: false, // Will be verified via OTP
+            updatedBy: req.user._id 
+          }
+        },
+        { 
+          new: true, 
+          runValidators: true,
+          setDefaultsOnInsert: true // Ensure defaults are set if creating new fields
         }
-      },
-      { new: true, runValidators: true }
-    );
+      );
+      
+      if (!updateResult) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+    } catch (updateError) {
+      logger.error('Error during phone update', { 
+        userId: req.user._id, 
+        error: updateError.message,
+        code: updateError.code 
+      });
+      
+      // If it's a duplicate key error, provide better message
+      if (updateError.code === 11000) {
+        return res.status(400).json({ error: 'Phone number already in use' });
+      }
+      
+      throw updateError;
+    }
     
-    // TODO: Send OTP to phone number for verification
+    // Always refresh user from database to ensure we have the latest persisted data
+    // Use lean() to get plain JavaScript object, then explicitly select phone
+    const updatedUser = await User.findById(req.user._id).lean();
     
+    // If phone is still null or missing, force update it using direct document save
+    if (!updatedUser.phone || updatedUser.phone === null || updatedUser.phone === undefined || updatedUser.phone === '') {
+      try {
+        // Force update using direct document save
+        const userDoc = await User.findById(req.user._id);
+        userDoc.phone = phoneValue;
+        
+        await userDoc.save({ validateBeforeSave: true });
+        
+        // Re-fetch to verify
+        const finalUser = await User.findById(req.user._id).lean();
+        
+        if (!finalUser.phone || finalUser.phone === null) {
+          logger.error('Phone is still null after force save', { userId: req.user._id });
+        }
+        
+        // Convert back to Mongoose document for response
+        const finalUserDoc = await User.findById(req.user._id);
+        
+        res.json({ 
+          success: true, 
+          message: 'Phone number updated. Please verify via OTP.',
+          data: { user: finalUserDoc } 
+        });
+        return;
+      } catch (saveError) {
+        logger.error('Error during force save', { 
+          userId: req.user._id, 
+          error: saveError.message 
+        });
+        throw saveError;
+      }
+    }
+    
+    // Convert back to Mongoose document for response
+    const finalUserDoc = await User.findById(req.user._id);
+    
+    // Verify phone was actually saved - if still null, log error
+    if (!finalUserDoc.phone || finalUserDoc.phone === null || finalUserDoc.phone === undefined) {
+      logger.error('Phone update failed - phone still null after update', { 
+        userId: req.user._id,
+        email: finalUserDoc.email,
+        attemptedPhone: phoneValue
+      });
+    }
+    
+    // Return the refreshed user data
     res.json({ 
       success: true, 
       message: 'Phone number updated. Please verify via OTP.',
-      data: { user } 
+      data: { user: finalUserDoc } 
+    });
+    return;
+    
+  } catch (error) {
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ 
+        error: 'Validation failed', 
+        details: errors.join(', ') 
+      });
+    }
+    
+    // Handle duplicate key error (phone already exists)
+    if (error.code === 11000 && error.keyPattern?.phone) {
+      return res.status(400).json({ error: 'Phone number already in use' });
+    }
+    
+    next(error);
+  }
+};
+
+// Bank Details CRUD - Using BankDetails model
+const BankDetails = require('../models/BankDetails.model');
+
+exports.addBankDetails = async (req, res, next) => {
+  try {
+    const { accountNumber, ifscCode, accountHolderName, bankName, branchName, accountType, isPrimary } = req.body;
+    
+    if (!accountNumber || !ifscCode || !accountHolderName || !bankName || !accountType) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // If setting as primary, unset other primary accounts
+    if (isPrimary) {
+      await BankDetails.updateMany(
+        { user: req.user._id },
+        { $set: { isPrimary: false } }
+      );
+    }
+
+    // Check if this is the first account (auto-set as primary)
+    const existingAccounts = await BankDetails.countDocuments({ user: req.user._id });
+    const setAsPrimary = isPrimary || existingAccounts === 0;
+
+    const bankDetails = await BankDetails.create({
+      user: req.user._id,
+      accountNumber,
+      ifscCode: ifscCode.toUpperCase(),
+      accountHolderName,
+      bankName,
+      branchName,
+      accountType,
+      isPrimary: setAsPrimary,
+      verificationStatus: 'pending'
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Bank details added successfully',
+      data: { bankDetails } 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getBankDetails = async (req, res, next) => {
+  try {
+    const bankDetails = await BankDetails.find({ 
+      user: req.user._id,
+      isActive: true 
+    }).sort({ isPrimary: -1, createdAt: -1 });
+
+    res.json({ 
+      success: true, 
+      data: { bankDetails } 
     });
   } catch (error) {
     next(error);
@@ -72,21 +228,102 @@ exports.updatePhone = async (req, res, next) => {
 
 exports.updateBankDetails = async (req, res, next) => {
   try {
-    const { accountNumber, ifscCode, accountHolderName, bankName, branchName, accountType } = req.body;
-    
-    const user = await User.findById(req.user._id);
-    user.bankDetails.push({
-      accountNumber: encrypt(accountNumber),
-      ifscCode,
-      accountHolderName,
-      bankName,
-      branchName,
-      accountType,
-      isPrimary: user.bankDetails.length === 0
+    const { bankDetailsId } = req.params;
+    const { accountNumber, ifscCode, accountHolderName, bankName, branchName, accountType, isPrimary } = req.body;
+
+    const bankDetails = await BankDetails.findOne({
+      _id: bankDetailsId,
+      user: req.user._id
     });
-    await user.save();
-    
-    res.json({ success: true, message: 'Bank details added successfully' });
+
+    if (!bankDetails) {
+      return res.status(404).json({ error: 'Bank details not found' });
+    }
+
+    // If setting as primary, unset other primary accounts
+    if (isPrimary && !bankDetails.isPrimary) {
+      await BankDetails.updateMany(
+        { user: req.user._id, _id: { $ne: bankDetailsId } },
+        { $set: { isPrimary: false } }
+      );
+    }
+
+    // Update fields
+    if (accountNumber) bankDetails.accountNumber = accountNumber;
+    if (ifscCode) bankDetails.ifscCode = ifscCode.toUpperCase();
+    if (accountHolderName) bankDetails.accountHolderName = accountHolderName;
+    if (bankName) bankDetails.bankName = bankName;
+    if (branchName !== undefined) bankDetails.branchName = branchName;
+    if (accountType) bankDetails.accountType = accountType;
+    if (isPrimary !== undefined) bankDetails.isPrimary = isPrimary;
+
+    await bankDetails.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Bank details updated successfully',
+      data: { bankDetails } 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.deleteBankDetails = async (req, res, next) => {
+  try {
+    const { bankDetailsId } = req.params;
+
+    const bankDetails = await BankDetails.findOne({
+      _id: bankDetailsId,
+      user: req.user._id
+    });
+
+    if (!bankDetails) {
+      return res.status(404).json({ error: 'Bank details not found' });
+    }
+
+    // Soft delete
+    bankDetails.isActive = false;
+    await bankDetails.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Bank details deleted successfully' 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.setPrimaryBank = async (req, res, next) => {
+  try {
+    const { bankDetailsId } = req.params;
+
+    const bankDetails = await BankDetails.findOne({
+      _id: bankDetailsId,
+      user: req.user._id,
+      isActive: true
+    });
+
+    if (!bankDetails) {
+      return res.status(404).json({ error: 'Bank details not found' });
+    }
+
+    // Unset all other primary accounts
+    await BankDetails.updateMany(
+      { user: req.user._id, _id: { $ne: bankDetailsId } },
+      { $set: { isPrimary: false } }
+    );
+
+    // Set this as primary
+    bankDetails.isPrimary = true;
+    await bankDetails.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Primary bank account updated successfully',
+      data: { bankDetails } 
+    });
   } catch (error) {
     next(error);
   }
@@ -229,7 +466,6 @@ exports.updateOnboardingStep1 = async (req, res, next) => {
         }
       }
       
-      console.log('📝 Merged address data:', updateData.address);
     } else if (currentUser.diditVerification?.addressVerified && verificationData?.verifiedAddress) {
       // No manual input, use verified data only
       updateData.address = verificationData.verifiedAddress;

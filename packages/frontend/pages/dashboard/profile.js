@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { ProtectedRoute, useAuth } from '../../lib/auth';
@@ -6,20 +6,62 @@ import DashboardLayout from '../../components/DashboardLayout';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { userAPI } from '../../lib/api';
-import { FaUser, FaPhone, FaEnvelope, FaShieldAlt, FaGoogle, FaBriefcase, FaMapMarkerAlt, FaChartPie, FaEdit } from 'react-icons/fa';
+import { FaUser, FaPhone, FaEnvelope, FaShieldAlt, FaGoogle, FaBriefcase, FaMapMarkerAlt, FaChartPie, FaEdit, FaUniversity, FaPlus, FaTrash, FaCheckCircle } from 'react-icons/fa';
 import VerificationBadge from '../../components/VerificationBadge';
 
 function ProfilePage() {
   const { user, loadUser } = useAuth();
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  // Main profile form (for firstName and lastName)
+  const { register, handleSubmit, formState: { errors }, reset } = useForm({
     defaultValues: {
-      firstName: user?.firstName,
-      lastName: user?.lastName,
-      phone: user?.phone,
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+    }
+  });
+  // Separate form for phone number to avoid validation conflicts
+  const { 
+    register: registerPhone, 
+    handleSubmit: handleSubmitPhone, 
+    formState: { errors: phoneErrors }, 
+    reset: resetPhone,
+    setValue: setPhoneValue,
+    getValues: getPhoneValues
+  } = useForm({
+    mode: 'onSubmit',
+    reValidateMode: 'onSubmit',
+    defaultValues: {
+      phone: '',
     }
   });
   const [loading, setLoading] = useState(false);
   const [phoneEdit, setPhoneEdit] = useState(false);
+  const [bankDetails, setBankDetails] = useState([]);
+  const [showBankForm, setShowBankForm] = useState(false);
+  const [editingBankId, setEditingBankId] = useState(null);
+  const { register: registerBank, handleSubmit: handleSubmitBank, formState: { errors: bankErrors }, reset: resetBank, getValues: getBankValues, setValue: setBankValue } = useForm();
+
+  // Reset profile form when user data changes
+  useEffect(() => {
+    if (user) {
+      reset({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+      });
+    }
+  }, [user, reset]);
+
+  // Initialize phone form when user data loads or when entering edit mode
+  useEffect(() => {
+    if (user && phoneEdit) {
+      // When entering edit mode, set the phone value (empty if user has no phone)
+      setPhoneValue('phone', user.phone || '', { shouldValidate: false });
+    }
+  }, [user, phoneEdit, setPhoneValue]);
+
+  // Load bank details on mount
+  useEffect(() => {
+    loadBankDetails();
+  }, []);
 
   // Helper function to calculate age from DOB
   const calculateAge = (dob) => {
@@ -129,12 +171,143 @@ function ProfilePage() {
   const onSubmitPhone = async (data) => {
     setLoading(true);
     try {
-      await userAPI.updatePhone(data.phone);
+      // Get phone value from form data or directly from form values
+      const phoneValue = data?.phone || getPhoneValues('phone') || '';
+      const phone = phoneValue.toString().trim();
+      
+      if (!phone || phone.length === 0) {
+        toast.error('Phone number cannot be empty');
+        setLoading(false);
+        return;
+      }
+      
+      await userAPI.updatePhone(phone);
+      
+      // Refresh user data to get updated phone - add delay to ensure DB is updated
+      await new Promise(resolve => setTimeout(resolve, 200));
       await loadUser();
-      toast.success('Phone number updated!');
+      
+      // Small delay to ensure state update propagates
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      toast.success('Phone number updated successfully!');
       setPhoneEdit(false);
     } catch (error) {
-      toast.error(error.error || 'Failed to update phone');
+      const errorMessage = error?.error || error?.details || error?.message || 'Failed to update phone number';
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadBankDetails = async () => {
+    try {
+      const response = await userAPI.getBankDetails();
+      setBankDetails(response.data.bankDetails || []);
+    } catch (error) {
+      console.error('Error loading bank details:', error);
+    }
+  };
+
+  const onSubmitBank = async (data, e) => {
+    setLoading(true);
+    try {
+      // Hybrid approach: Read values directly from DOM as fallback
+      let formData = { ...data };
+      
+      if (e?.target) {
+        const accountHolderNameInput = e.target.querySelector('input[name="accountHolderName"]');
+        const accountNumberInput = e.target.querySelector('input[name="accountNumber"]');
+        const ifscCodeInput = e.target.querySelector('input[name="ifscCode"]');
+        const bankNameInput = e.target.querySelector('input[name="bankName"]');
+        const branchNameInput = e.target.querySelector('input[name="branchName"]');
+        const accountTypeSelect = e.target.querySelector('select[name="accountType"]');
+        const isPrimaryCheckbox = e.target.querySelector('input[name="isPrimary"]');
+        
+        // Use DOM values if react-hook-form values are missing
+        if (!formData.accountHolderName && accountHolderNameInput?.value) {
+          formData.accountHolderName = accountHolderNameInput.value.trim();
+        }
+        if (!formData.accountNumber && accountNumberInput?.value) {
+          formData.accountNumber = accountNumberInput.value.trim();
+        }
+        if (!formData.ifscCode && ifscCodeInput?.value) {
+          formData.ifscCode = ifscCodeInput.value.trim().toUpperCase();
+        }
+        if (!formData.bankName && bankNameInput?.value) {
+          formData.bankName = bankNameInput.value.trim();
+        }
+        if (branchNameInput?.value) {
+          formData.branchName = branchNameInput.value.trim();
+        }
+        if (!formData.accountType && accountTypeSelect?.value) {
+          formData.accountType = accountTypeSelect.value;
+        }
+        if (isPrimaryCheckbox) {
+          formData.isPrimary = isPrimaryCheckbox.checked;
+        }
+      }
+      
+      // Validate required fields
+      if (!formData.accountHolderName || !formData.accountNumber || !formData.ifscCode || !formData.bankName || !formData.accountType) {
+        toast.error('Please fill in all required fields');
+        setLoading(false);
+        return;
+      }
+      
+      // Clean and format data
+      const cleanData = {
+        accountHolderName: formData.accountHolderName.trim(),
+        accountNumber: formData.accountNumber.trim(),
+        ifscCode: formData.ifscCode.trim().toUpperCase(),
+        bankName: formData.bankName.trim(),
+        branchName: formData.branchName?.trim() || '',
+        accountType: formData.accountType,
+        isPrimary: formData.isPrimary || false
+      };
+      
+      if (editingBankId) {
+        await userAPI.updateBankDetails(editingBankId, cleanData);
+        toast.success('Bank details updated successfully!');
+      } else {
+        await userAPI.addBankDetails(cleanData);
+        toast.success('Bank details added successfully!');
+      }
+      setShowBankForm(false);
+      setEditingBankId(null);
+      resetBank();
+      await loadBankDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to save bank details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBank = async (bankDetailsId) => {
+    if (!confirm('Are you sure you want to delete this bank account?')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await userAPI.deleteBankDetails(bankDetailsId);
+      toast.success('Bank details deleted successfully!');
+      await loadBankDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete bank details');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetPrimary = async (bankDetailsId) => {
+    setLoading(true);
+    try {
+      await userAPI.setPrimaryBank(bankDetailsId);
+      toast.success('Primary bank account updated!');
+      await loadBankDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update primary bank');
     } finally {
       setLoading(false);
     }
@@ -257,57 +430,431 @@ function ProfilePage() {
                 )}
               </div>
 
-              {/* Phone */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3 flex-1">
-                  <FaPhone className="text-gray-400 text-xl" />
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-500">Phone</p>
-                    {phoneEdit ? (
-                      <form onSubmit={handleSubmit(onSubmitPhone)} className="flex gap-2 mt-1">
-                        <input
-                          {...register('phone', { required: 'Phone is required' })}
-                          type="tel"
-                          className="input"
-                          placeholder="+91 9876543210"
-                        />
-                        <button type="submit" className="btn-primary text-sm">
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPhoneEdit(false)}
-                          className="btn-secondary text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <p className="font-medium">{user?.phone || 'Not provided'}</p>
-                    )}
-                  </div>
+              {/* Phone - Simplified Card */}
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <div className="mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaPhone className="inline mr-2 text-gray-400" />
+                    Phone Number
+                  </label>
                 </div>
-                {!phoneEdit && (
-                  <div className="flex items-center gap-2">
-                    {user?.isPhoneVerified ? (
-                      <span className="badge badge-success">Verified</span>
-                    ) : user?.phone ? (
-                      <button className="text-primary-600 hover:text-primary-700 text-sm">
-                        Verify
-                      </button>
-                    ) : null}
-                    {!user?.phone && (
-                      <button
-                        onClick={() => setPhoneEdit(true)}
-                        className="text-primary-600 hover:text-primary-700 text-sm"
+                
+                {phoneEdit ? (
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      // Get the input element directly
+                      const inputElement = e.target.querySelector('input[type="tel"]');
+                      const inputValue = inputElement?.value || '';
+                      
+                      // Use handleSubmitPhone but ensure we have the value
+                      handleSubmitPhone((data) => {
+                        // Fallback: if data.phone is empty but input has value, use input value
+                        const finalPhone = data?.phone || inputValue || getPhoneValues('phone') || '';
+                        if (finalPhone) {
+                          onSubmitPhone({ phone: finalPhone });
+                        } else {
+                          onSubmitPhone(data);
+                        }
+                      })(e);
+                    }} 
+                    className="space-y-3"
+                  >
+                    <div>
+                      <input
+                        {...registerPhone('phone', { 
+                          required: {
+                            value: true,
+                            message: 'Phone is required'
+                          },
+                          validate: (value) => {
+                            if (!value) return 'Phone is required';
+                            const trimmed = String(value).trim();
+                            if (trimmed.length === 0) {
+                              return 'Phone number cannot be empty';
+                            }
+                            return true;
+                          }
+                        })}
+                        type="tel"
+                        className="input w-full"
+                        placeholder="+91 9876543210"
+                        disabled={loading}
+                        autoComplete="tel"
+                        onBlur={(e) => {
+                          // Ensure value is set when blurring
+                          const value = e.target.value;
+                          if (value) {
+                            setPhoneValue('phone', value, { shouldValidate: false });
+                          }
+                        }}
+                      />
+                      {phoneErrors.phone && (
+                        <p className="text-sm text-red-600 mt-1">{phoneErrors.phone.message}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        type="submit" 
+                        className="btn-primary text-sm"
+                        disabled={loading}
                       >
-                        Add Phone
+                        {loading ? 'Saving...' : 'Save'}
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhoneEdit(false);
+                          setPhoneValue('phone', user?.phone || '', { shouldValidate: false });
+                        }}
+                        className="btn-secondary text-sm"
+                        disabled={loading}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-gray-900">
+                      {(() => {
+                        const phoneValue = user?.phone;
+                        if (phoneValue && phoneValue !== null && phoneValue !== undefined && phoneValue !== 'null' && phoneValue !== '') {
+                          return String(phoneValue);
+                        }
+                        return <span className="text-gray-400">Not provided</span>;
+                      })()}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {user?.isPhoneVerified && (
+                        <span className="badge badge-success">Verified</span>
+                      )}
+                      {user?.phone && user.phone !== null && user.phone !== 'null' && !user?.isPhoneVerified && (
+                        <button className="text-primary-600 hover:text-primary-700 text-sm">
+                          Verify
+                        </button>
+                      )}
+                      {(!user?.phone || user.phone === null || user.phone === 'null') && (
+                        <button
+                          onClick={() => {
+                            setPhoneEdit(true);
+                            setPhoneValue('phone', '', { shouldValidate: false });
+                          }}
+                          className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                        >
+                          Add Phone
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Bank Details */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <FaUniversity className="text-primary-600" />
+                Bank Details
+              </h3>
+              {!showBankForm && (
+                <button
+                  onClick={() => {
+                    setShowBankForm(true);
+                    setEditingBankId(null);
+                    resetBank();
+                  }}
+                  className="btn btn-sm btn-primary flex items-center space-x-2"
+                >
+                  <FaPlus />
+                  <span>Add Bank Account</span>
+                </button>
+              )}
+            </div>
+
+            {showBankForm ? (
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSubmitBank(onSubmitBank)(e);
+                }} 
+                className="space-y-4"
+              >
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Account Holder Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      {...registerBank('accountHolderName', { required: 'Account holder name is required' })}
+                      name="accountHolderName"
+                      type="text"
+                      className="input w-full"
+                      placeholder="John Doe"
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim();
+                        if (value) {
+                          setBankValue('accountHolderName', value, { shouldValidate: false });
+                        }
+                      }}
+                    />
+                    {bankErrors.accountHolderName && (
+                      <p className="mt-1 text-sm text-red-600">{bankErrors.accountHolderName.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Account Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      {...registerBank('accountNumber', { 
+                        required: 'Account number is required',
+                        pattern: {
+                          value: /^\d+$/,
+                          message: 'Account number must contain only digits'
+                        }
+                      })}
+                      name="accountNumber"
+                      type="text"
+                      className="input w-full"
+                      placeholder="1234567890"
+                      maxLength={20}
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim();
+                        if (value) {
+                          setBankValue('accountNumber', value, { shouldValidate: false });
+                        }
+                      }}
+                    />
+                    {bankErrors.accountNumber && (
+                      <p className="mt-1 text-sm text-red-600">{bankErrors.accountNumber.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      IFSC Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      {...registerBank('ifscCode', { 
+                        required: 'IFSC code is required',
+                        pattern: {
+                          value: /^[A-Z]{4}0[A-Z0-9]{6}$/,
+                          message: 'Invalid IFSC format (e.g., HDFC0001234)'
+                        }
+                      })}
+                      name="ifscCode"
+                      type="text"
+                      className="input w-full uppercase"
+                      placeholder="HDFC0001234"
+                      maxLength={11}
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onChange={(e) => {
+                        e.target.value = e.target.value.toUpperCase();
+                        const value = e.target.value.toUpperCase();
+                        setBankValue('ifscCode', value, { shouldValidate: false });
+                      }}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim().toUpperCase();
+                        if (value) {
+                          setBankValue('ifscCode', value, { shouldValidate: false });
+                        }
+                      }}
+                    />
+                    {bankErrors.ifscCode && (
+                      <p className="mt-1 text-sm text-red-600">{bankErrors.ifscCode.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Bank Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      {...registerBank('bankName', { required: 'Bank name is required' })}
+                      name="bankName"
+                      type="text"
+                      className="input w-full"
+                      placeholder="HDFC Bank"
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim();
+                        if (value) {
+                          setBankValue('bankName', value, { shouldValidate: false });
+                        }
+                      }}
+                    />
+                    {bankErrors.bankName && (
+                      <p className="mt-1 text-sm text-red-600">{bankErrors.bankName.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Branch Name
+                    </label>
+                    <input
+                      {...registerBank('branchName')}
+                      name="branchName"
+                      type="text"
+                      className="input w-full"
+                      placeholder="Mumbai Branch"
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onBlur={(e) => {
+                        const value = e.target.value.trim();
+                        setBankValue('branchName', value, { shouldValidate: false });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Account Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      {...registerBank('accountType', { required: 'Account type is required' })}
+                      name="accountType"
+                      className="input w-full"
+                      style={{ width: '100%', minWidth: '0', flexShrink: 0 }}
+                      onBlur={(e) => {
+                        const value = e.target.value;
+                        if (value) {
+                          setBankValue('accountType', value, { shouldValidate: false });
+                        }
+                      }}
+                    >
+                      <option value="">Select account type</option>
+                      <option value="savings">Savings</option>
+                      <option value="current">Current</option>
+                    </select>
+                    {bankErrors.accountType && (
+                      <p className="mt-1 text-sm text-red-600">{bankErrors.accountType.message}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    {...registerBank('isPrimary')}
+                    name="isPrimary"
+                    type="checkbox"
+                    id="isPrimary"
+                    className="h-4 w-4 text-primary-600 border-gray-300 rounded"
+                    onChange={(e) => {
+                      setBankValue('isPrimary', e.target.checked, { shouldValidate: false });
+                    }}
+                  />
+                  <label htmlFor="isPrimary" className="text-sm text-gray-700">
+                    Set as primary bank account
+                  </label>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn-primary"
+                  >
+                    {loading ? 'Saving...' : editingBankId ? 'Update' : 'Add Bank Account'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBankForm(false);
+                      setEditingBankId(null);
+                      resetBank();
+                    }}
+                    className="btn-secondary"
+                    disabled={loading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3">
+                {bankDetails.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <FaUniversity className="text-4xl mx-auto mb-3 text-gray-300" />
+                    <p>No bank accounts added yet</p>
+                    <p className="text-sm mt-1">Add a bank account to receive distribution payments</p>
+                  </div>
+                ) : (
+                  bankDetails.map((bank) => (
+                    <div key={bank._id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-gray-900">{bank.accountHolderName}</h4>
+                            {bank.isPrimary && (
+                              <span className="badge badge-success text-xs">Primary</span>
+                            )}
+                            {bank.verificationStatus === 'verified' && (
+                              <span className="badge badge-success text-xs flex items-center gap-1">
+                                <FaCheckCircle className="text-xs" />
+                                Verified
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid md:grid-cols-2 gap-2 text-sm text-gray-600">
+                            <div>
+                              <span className="font-medium">Account:</span> {bank.maskedAccountNumber || '****'}
+                            </div>
+                            <div>
+                              <span className="font-medium">IFSC:</span> {bank.ifscCode}
+                            </div>
+                            <div>
+                              <span className="font-medium">Bank:</span> {bank.bankName}
+                            </div>
+                            <div>
+                              <span className="font-medium">Type:</span> {bank.accountType?.toUpperCase()}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          {!bank.isPrimary && (
+                            <button
+                              onClick={() => handleSetPrimary(bank._id)}
+                              disabled={loading}
+                              className="btn btn-sm btn-secondary"
+                              title="Set as primary"
+                            >
+                              Set Primary
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setEditingBankId(bank._id);
+                              setShowBankForm(true);
+                              resetBank({
+                                accountHolderName: bank.accountHolderName,
+                                ifscCode: bank.ifscCode,
+                                bankName: bank.bankName,
+                                branchName: bank.branchName,
+                                accountType: bank.accountType,
+                                isPrimary: bank.isPrimary
+                              });
+                            }}
+                            disabled={loading}
+                            className="btn btn-sm btn-secondary"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBank(bank._id)}
+                            disabled={loading}
+                            className="btn btn-sm btn-danger"
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           {/* KYC Status */}

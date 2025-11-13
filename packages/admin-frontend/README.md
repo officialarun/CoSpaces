@@ -56,12 +56,6 @@ packages/admin-frontend/
 - JWT token stored in localStorage
 - Auto-logout on token expiration
 
-## Documentation
-
-See root-level documentation:
-- **ADMIN_CONSOLE_GUIDE.md** - Complete user guide
-- **ADMIN_CONSOLE_QUICK_START.md** - Quick reference
-
 ## Scripts
 
 - `npm run dev` - Start development server (port 3001)

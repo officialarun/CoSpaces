@@ -23,7 +23,6 @@ export default function OnboardingStep2() {
   // Load existing user data when component mounts
   useEffect(() => {
     if (user && user.investmentPreferences) {
-      console.log('📥 Loading existing investment preferences...');
       
       setFormData({
         landTypes: user.investmentPreferences.landTypes || [],
@@ -37,7 +36,6 @@ export default function OnboardingStep2() {
         maximumInvestmentAmount: user.investmentPreferences.maximumInvestmentAmount || ''
       });
       
-      console.log('✅ Investment preferences loaded into form');
     }
   }, [user]);
 

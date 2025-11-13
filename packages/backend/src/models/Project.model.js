@@ -288,8 +288,7 @@ const projectSchema = new mongoose.Schema({
   // Team
   assetManager: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
   
   team: [{

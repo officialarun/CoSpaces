@@ -270,6 +270,150 @@ exports.deactivateUser = async (req, res, next) => {
 };
 
 /**
+ * Create staff member (Asset Manager or Compliance Officer)
+ * POST /api/v1/admin/staff/create
+ */
+exports.createStaff = async (req, res, next) => {
+  try {
+    const { firstName, lastName, email, password, role, phone } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !password || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: firstName, lastName, email, password, role'
+      });
+    }
+
+    // Validate role
+    if (!['asset_manager', 'compliance_officer'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role. Must be "asset_manager" or "compliance_officer"'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Import staff seed service
+    const staffSeedService = require('../services/staffSeed.service');
+
+    // Create and seed staff member
+    const userData = {
+      firstName,
+      lastName,
+      email,
+      password,
+      role,
+      phone: phone || ''
+    };
+
+    const staffUser = await staffSeedService.seedStaffMember(userData, req.user._id);
+
+    // Return user (excluding password)
+    const userResponse = staffUser.toObject();
+    delete userResponse.password;
+
+    logger.info(`Admin ${req.user.email} created staff member: ${staffUser.email} (${role})`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Staff member created successfully',
+      data: {
+        user: userResponse,
+        loginInstructions: {
+          email: staffUser.email,
+          password: 'As set by admin',
+          googleOAuth: `Can login via Google OAuth using ${staffUser.email}`,
+          note: 'Staff member can login immediately with email/password or Google OAuth'
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error creating staff member:', error);
+    
+    // Handle duplicate email error
+    if (error.message.includes('already exists')) {
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+
+    next(error);
+  }
+};
+
+/**
+ * Get all staff members (Asset Managers and Compliance Officers)
+ * GET /api/v1/admin/staff
+ */
+exports.getAllStaff = async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search = '',
+      role = '',
+      isActive = ''
+    } = req.query;
+
+    // Build query - only staff roles
+    const query = {
+      role: { $in: ['asset_manager', 'compliance_officer'] }
+    };
+    
+    // Search by name or email
+    if (search) {
+      query.$or = [
+        { email: { $regex: search, $options: 'i' } },
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Filter by role
+    if (role && ['asset_manager', 'compliance_officer'].includes(role)) {
+      query.role = role;
+    }
+
+    // Filter by active status
+    if (isActive !== '') {
+      query.isActive = isActive === 'true';
+    }
+
+    const staff = await User.find(query)
+      .select('-password')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 });
+
+    const count = await User.countDocuments(query);
+
+    logger.info(`Admin ${req.user.email} retrieved ${staff.length} staff members`);
+
+    res.json({
+      success: true,
+      data: {
+        staff,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page),
+        totalStaff: count
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching staff members:', error);
+    next(error);
+  }
+};
+
+/**
  * Get user onboarding status
  * GET /api/v1/admin/users/:id/onboarding-status
  */
@@ -342,31 +486,31 @@ exports.getAllProjects = async (req, res, next) => {
     }
 
     const projects = await Project.find(query)
-      .populate('assetManager', 'profile.firstName profile.lastName email')
+      .populate('assetManager', 'firstName lastName email role')
+      .populate('spv', 'spvName spvCode')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
 
+    // Fix any projects that have SPV but wrong status (data consistency)
+    for (const project of projects) {
+      if (project.spv && project.status !== 'approved' && project.status !== 'acquired') {
+        const oldStatus = project.status;
+        project.status = 'approved';
+        await project.save();
+        logger.info(`Fixed project ${project.projectCode}: has SPV but status was ${oldStatus}, updated to approved`);
+      }
+    }
+
     const count = await Project.countDocuments(query);
 
-    // Aggregate raised amounts (paid) per project
-    const Subscription = require('../models/Subscription.model');
-    const sums = await Subscription.aggregate([
-      { $match: { status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-      { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } } } }
-    ]);
-    const raisedMap = new Map(sums.map(s => [String(s._id), s.totalPaid]));
-
-    // Include direct payments (Razorpay) captured via Payment model
+    // Aggregate raised amounts from Payment model only
     const Payment = require('../models/Payment.model');
     const payAgg = await Payment.aggregate([
       { $match: { status: 'captured' } },
       { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
     ]);
-    for (const p of payAgg) {
-      const key = String(p._id);
-      raisedMap.set(key, (raisedMap.get(key) || 0) + (p.total || 0));
-    }
+    const raisedMap = new Map(payAgg.map(p => [String(p._id), p.total || 0]));
 
     logger.info(`Admin ${req.user.email} retrieved ${projects.length} projects`);
 
@@ -395,26 +539,30 @@ exports.getAllProjects = async (req, res, next) => {
 /** Recalculate funding status for all active projects */
 exports.recalculateFundingStatus = async (req, res, next) => {
   try {
-    const Subscription = require('../models/Subscription.model');
-    const candidateStatuses = ['fundraising', 'listed', 'approved'];
+    const Payment = require('../models/Payment.model');
+    // Include 'under_acquisition' so projects can be moved from funded to under_acquisition
+    const candidateStatuses = ['fundraising', 'listed', 'approved', 'under_acquisition'];
     const projects = await Project.find({ status: { $in: candidateStatuses } });
     let updated = 0;
 
     for (const project of projects) {
-      const agg = await Subscription.aggregate([
-        { $match: { project: project._id, status: { $in: ['payment_confirmed', 'shares_allocated', 'completed'] } } },
-        { $group: { _id: '$project', totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } }, totalCommitted: { $sum: { $ifNull: ['$committedAmount', 0] } } } }
+      // Aggregate from Payments only
+      const payAgg = await Payment.aggregate([
+        { $match: { project: project._id, status: 'captured' } },
+        { $group: { _id: '$project', total: { $sum: { $ifNull: ['$amountInINR', 0] } } } }
       ]);
 
-      const total = agg?.[0]?.totalPaid || 0; // prefer paidAmount; adjust if needed
+      const totalRaised = payAgg?.[0]?.total || 0;
       const target = project.financials?.targetRaise || 0;
 
-      if (total >= target && target > 0) {
-        project.status = 'funded';
+      if (totalRaised >= target && target > 0) {
+        // Move to 'under_acquisition' when funding is complete
+        project.status = 'under_acquisition';
         project.timeline = project.timeline || {};
         project.timeline.fundraisingEndDate = new Date();
         await project.save();
         updated++;
+        logger.info(`Project ${project.projectCode} marked as under_acquisition. Raised: ${totalRaised}, Target: ${target}`);
       }
     }
 
@@ -766,11 +914,15 @@ exports.getAllSPVs = async (req, res, next) => {
     if (trust) query.trust = trust;
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { registrationNumber: { $regex: search, $options: 'i' } },
+        { spvName: { $regex: search, $options: 'i' } },
+        { spvCode: { $regex: search, $options: 'i' } },
+        { 'registrationDetails.cin': { $regex: search, $options: 'i' } },
       ];
     }
-    const spvs = await SPV.find(query).populate('trust');
+    const spvs = await SPV.find(query).populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     res.json({ success: true, data: { spvs } });
   } catch (error) {
     logger.error('Error fetching SPVs:', error);
@@ -786,8 +938,50 @@ exports.createSPV = async (req, res, next) => {
     const trust = await Trust.findById(req.body.trust);
     if (!trust) return res.status(400).json({ success: false, error: 'Invalid trust' });
 
-    const spv = await SPV.create({ ...req.body });
+    // Map form fields to model fields and set defaults
+    const spvData = {
+      // Map 'name' to 'spvName'
+      spvName: req.body.name || req.body.spvName,
+      // Generate spvCode if not provided
+      spvCode: req.body.spvCode || `SPV-${Date.now()}`,
+      // Map trust
+      trust: req.body.trust,
+      // Set registration number if provided
+      ...(req.body.registrationNumber && {
+        'registrationDetails.cin': req.body.registrationNumber
+      }),
+      // Set required fields with defaults
+      shareStructure: {
+        authorizedCapital: req.body.shareStructure?.authorizedCapital || req.body.authorizedCapital || 1000000, // Default 10L
+        ...(req.body.shareStructure || {})
+      },
+      fundraising: {
+        targetAmount: req.body.fundraising?.targetAmount || req.body.targetAmount || 1000000, // Default 10L
+        minimumInvestment: req.body.fundraising?.minimumInvestment || req.body.minimumInvestment || 50000, // Default 50K
+        ...(req.body.fundraising || {})
+      },
+      // Set createdBy
+      createdBy: req.user._id,
+      // Project is optional - will be assigned later via Assign SPV
+      ...(req.body.project && { project: req.body.project }),
+      // Set entity type if provided
+      ...(req.body.entityType && { entityType: req.body.entityType }),
+      // Include any other fields from req.body (but don't override what we've set)
+      ...Object.keys(req.body).reduce((acc, key) => {
+        if (!['name', 'spvCode', 'trust', 'registrationNumber', 'authorizedCapital', 'targetAmount', 'minimumInvestment'].includes(key)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
+    };
+
+    const spv = await SPV.create(spvData);
     await AuditLog.logEvent({ eventType: 'spv_created', eventCategory: 'spv', performedBy: req.user._id, targetEntity: { entityType: 'spv', entityId: spv._id }, action: 'SPV created by admin' });
+    // Populate trust before returning
+    await spv.populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     res.status(201).json({ success: true, data: { spv } });
   } catch (error) {
     logger.error('Error creating SPV:', error);
@@ -798,8 +992,34 @@ exports.createSPV = async (req, res, next) => {
 exports.updateSPV = async (req, res, next) => {
   try {
     const SPV = require('../models/SPV.model');
-    const spv = await SPV.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    // Map form fields to model fields (same as createSPV)
+    const updateData = {
+      // Map 'name' to 'spvName'
+      ...(req.body.name !== undefined && { spvName: req.body.name }),
+      // Map registrationNumber to registrationDetails.cin
+      ...(req.body.registrationNumber !== undefined && {
+        'registrationDetails.cin': req.body.registrationNumber
+      }),
+      // Include other fields that match the model directly
+      ...Object.keys(req.body).reduce((acc, key) => {
+        if (!['name', 'registrationNumber'].includes(key)) {
+          acc[key] = req.body[key];
+        }
+        return acc;
+      }, {})
+    };
+    
+    const spv = await SPV.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
     if (!spv) return res.status(404).json({ success: false, error: 'SPV not found' });
+    // Populate trust before returning
+    await spv.populate({
+      path: 'trust',
+      select: 'name registrationNumber'
+    });
     await AuditLog.logEvent({ eventType: 'spv_updated', eventCategory: 'spv', performedBy: req.user._id, targetEntity: { entityType: 'spv', entityId: spv._id }, action: 'SPV updated by admin' });
     res.json({ success: true, data: { spv } });
   } catch (error) {
@@ -838,13 +1058,34 @@ exports.assignSPVToProject = async (req, res, next) => {
     const spv = await SPV.findById(spvId).populate('trust');
     if (!spv) return res.status(400).json({ success: false, error: 'Invalid SPV' });
 
+    // Check if SPV is already assigned to another project
+    if (spv.project && String(spv.project) !== String(projectId)) {
+      return res.status(409).json({ success: false, error: 'SPV is already assigned to another project' });
+    }
+
+    // Update project with SPV
     project.spv = spv._id;
-    // Optional: transition status after assignment
-    if (['funded', 'fundraising', 'approved', 'listed'].includes(project.status)) {
+    // When SPV is assigned, move project from 'under_acquisition' to 'approved'
+    // Also handle any existing projects that might have wrong status
+    if (project.status === 'under_acquisition' || (project.spv && project.status !== 'approved')) {
+      project.status = 'approved';
+      project.timeline = project.timeline || {};
+      project.timeline.expectedAcquisitionDate = project.timeline.expectedAcquisitionDate || new Date();
+    } else if (['funded', 'fundraising', 'listed'].includes(project.status)) {
+      // For other statuses, move to 'under_acquisition' first
       project.status = 'under_acquisition';
+      project.timeline = project.timeline || {};
       project.timeline.expectedAcquisitionDate = project.timeline.expectedAcquisitionDate || new Date();
     }
     await project.save();
+
+    // Update SPV with project (bidirectional link)
+    spv.project = project._id;
+    await spv.save();
+
+    // Populate project fields before returning
+    await project.populate('spv');
+    await project.populate('assetManager', 'firstName lastName email');
 
     await AuditLog.logEvent({
       eventType: 'spv_assigned_to_project',
@@ -855,12 +1096,112 @@ exports.assignSPVToProject = async (req, res, next) => {
       metadata: { spvId: spv._id, trustId: spv.trust?._id }
     });
 
+    // Trigger equity distribution and SHA generation
+    try {
+      const equityController = require('./equity.controller');
+      const distributionResult = await equityController.distributeEquity(
+        spv._id.toString(),
+        project._id.toString(),
+        req.user._id.toString()
+      );
+      
+      logger.info('Equity distribution triggered after SPV assignment', {
+        projectId: project._id,
+        spvId: spv._id,
+        distributionsCount: distributionResult.distributions?.length || 0,
+        agreementsCount: distributionResult.agreements?.length || 0
+      });
+    } catch (equityError) {
+      // Log error but don't fail the SPV assignment
+      logger.error('Failed to distribute equity after SPV assignment:', equityError);
+      // Continue with response - equity can be distributed manually later if needed
+    }
+
     res.json({ success: true, message: 'SPV assigned to project', data: { project } });
   } catch (error) {
     logger.error('Error assigning SPV:', error);
     next(error);
   }
 };
+
+/**
+ * Assign Asset Manager to Project
+ * POST /api/v1/admin/projects/:projectId/assign-asset-manager
+ */
+exports.assignAssetManagerToProject = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const { assetManagerId } = req.body;
+
+    if (!assetManagerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Asset manager ID is required'
+      });
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Verify that the user exists and has asset_manager role
+    const assetManager = await User.findById(assetManagerId);
+    if (!assetManager) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset manager not found'
+      });
+    }
+
+    if (assetManager.role !== 'asset_manager') {
+      return res.status(400).json({
+        success: false,
+        error: 'User must have asset_manager role'
+      });
+    }
+
+    // Update project
+    const previousAssetManager = project.assetManager;
+    project.assetManager = assetManager._id;
+    project.updatedBy = req.user._id;
+    await project.save();
+
+    // Populate before returning
+    await project.populate('assetManager', 'firstName lastName email role');
+
+    // Log audit event
+    await AuditLog.logEvent({
+      eventType: 'asset_manager_assigned_to_project',
+      eventCategory: 'project',
+      performedBy: req.user._id,
+      targetEntity: { entityType: 'project', entityId: project._id },
+      action: 'Asset manager assigned to project',
+      details: {
+        projectName: project.projectName,
+        projectCode: project.projectCode,
+        assetManagerId: assetManager._id,
+        assetManagerEmail: assetManager.email,
+        previousAssetManagerId: previousAssetManager?.toString() || null
+      }
+    });
+
+    logger.info(`Admin ${req.user.email} assigned asset manager ${assetManager.email} to project ${project.projectCode}`);
+
+    res.json({
+      success: true,
+      message: 'Asset manager assigned successfully',
+      data: { project }
+    });
+  } catch (error) {
+    logger.error('Error assigning asset manager:', error);
+    next(error);
+  }
+};
+
 // ==================== KYC MANAGEMENT ====================
 
 /**

@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+// Use the same env var name across frontend and admin:
+// NEXT_PUBLIC_API_BASE_URL (exposed to browser by Next.js)
+const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 // Create axios instance
 const api = axios.create({
@@ -66,6 +68,7 @@ export const adminProjectAPI = {
   unpublishProject: (id) => api.put(`/admin/projects/${id}/unpublish`),
   deleteProject: (id) => api.delete(`/admin/projects/${id}`),
   assignSPV: (projectId, spvId) => api.post(`/admin/projects/${projectId}/assign-spv`, { spvId }),
+  assignAssetManager: (projectId, assetManagerId) => api.post(`/admin/projects/${projectId}/assign-asset-manager`, { assetManagerId }),
 };
 
 // Trust APIs
@@ -96,6 +99,32 @@ export const adminKYCAPI = {
 export const adminStatsAPI = {
   getStats: () => api.get('/admin/stats'),
   getActivity: () => api.get('/admin/activity'),
+};
+
+// Admin Staff Management APIs
+export const adminStaffAPI = {
+  getStaff: (params) => api.get('/admin/staff', { params }),
+  createStaff: (data) => api.post('/admin/staff/create', data),
+};
+
+// Admin Distribution APIs
+export const adminDistributionAPI = {
+  getAllDistributions: (params) => api.get('/distributions', { params }),
+  getDistributionById: (id) => api.get(`/distributions/${id}`),
+  createDistribution: (data) => api.post('/distributions/calculate', data),
+  updateDistribution: (id, data) => api.put(`/distributions/${id}`, data),
+  cancelDistribution: (id, reason) => api.put(`/distributions/${id}/cancel`, { reason }),
+  approveAsAssetManager: (id, comments) => api.put(`/distributions/${id}/approve/asset-manager`, { comments }),
+  approveAsCompliance: (id, comments) => api.put(`/distributions/${id}/approve/compliance`, { comments }),
+  approveAsAdmin: (id, comments) => api.put(`/distributions/${id}/approve/admin`, { comments }),
+  processPayments: (id) => api.post(`/distributions/${id}/process-payments`),
+  markInvestorPaid: (id, investorId, data) => api.put(`/distributions/${id}/investor/${investorId}/mark-paid`, data),
+};
+
+// Bank Payment APIs
+export const bankPaymentAPI = {
+  processBulkPayments: (distributionId) => api.post('/bank-payments/process-bulk', { distributionId }),
+  getPaymentHistory: (userId) => api.get(`/bank-payments/history/${userId}`),
 };
 
 export default api;

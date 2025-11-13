@@ -18,9 +18,12 @@ export const AuthProvider = ({ children }) => {
     if (token) {
       try {
         const response = await authAPI.getCurrentUser();
-        setUser(response.data.user);
+        const userData = response.data.user;
+        
+        // Update localStorage as well for consistency
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
       } catch (error) {
-        console.error('Failed to load user:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
       }
@@ -69,7 +72,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await authAPI.logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      // Silently handle logout errors
     } finally {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

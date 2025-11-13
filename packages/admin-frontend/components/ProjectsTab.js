@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { adminProjectAPI } from '../lib/api';
-import { FaSearch, FaEye, FaEyeSlash, FaTrash } from 'react-icons/fa';
+import { FaSearch, FaEye, FaEyeSlash, FaTrash, FaUserShield } from 'react-icons/fa';
 import toast from 'react-hot-toast';
+import AssignAssetManagerModal from './AssignAssetManagerModal';
 
 export default function ProjectsTab() {
   const [projects, setProjects] = useState([]);
@@ -11,6 +12,8 @@ export default function ProjectsTab() {
   const [publicFilter, setPublicFilter] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [showAssignModal, setShowAssignModal] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -157,8 +160,11 @@ export default function ProjectsTab() {
                   <th>Code</th>
                   <th>Location</th>
                   <th>Status</th>
+                  <th>Asset Manager</th>
+                  <th>SPV</th>
                   <th>Published</th>
                   <th>Raised / Target</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,6 +177,27 @@ export default function ProjectsTab() {
                     </td>
                     <td>{getStatusBadge(project.status)}</td>
                     <td>
+                      {project.assetManager ? (
+                        <div className="flex items-center space-x-2">
+                          <FaUserShield className="text-blue-500 text-sm" />
+                          <span className="text-sm text-gray-700">
+                            {project.assetManager.firstName} {project.assetManager.lastName}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">Not assigned</span>
+                      )}
+                    </td>
+                    <td>
+                      {project.spv ? (
+                        <span className="text-sm font-medium text-primary-600">
+                          {project.spv?.spvName || project.spv?.name || 'SPV Assigned'}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td>
                       {project.isPublic ? (
                         <span className="badge badge-success">Published</span>
                       ) : (
@@ -180,7 +207,19 @@ export default function ProjectsTab() {
                     <td className="font-medium">
                       ₹{(project.funding?.raisedPaid || 0).toLocaleString()} / ₹{(project.financials?.targetRaise || 0).toLocaleString()}
                     </td>
-                    {/* Actions removed; manage publish/delete in Publish Sites tab */}
+                    <td>
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowAssignModal(true);
+                        }}
+                        className="btn btn-sm btn-secondary flex items-center space-x-1"
+                        title="Assign Asset Manager"
+                      >
+                        <FaUserShield />
+                        <span>Assign</span>
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -217,6 +256,22 @@ export default function ProjectsTab() {
           </>
         )}
       </div>
+
+      {/* Assign Asset Manager Modal */}
+      {showAssignModal && selectedProject && (
+        <AssignAssetManagerModal
+          project={selectedProject}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedProject(null);
+          }}
+          onSuccess={() => {
+            fetchProjects();
+            setShowAssignModal(false);
+            setSelectedProject(null);
+          }}
+        />
+      )}
     </div>
   );
 }

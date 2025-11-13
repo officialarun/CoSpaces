@@ -12,9 +12,9 @@
     "dev:frontend": "cd packages/frontend && npm run dev",
     "dev:admin": "cd packages/admin-frontend && npm run dev",
     "dev": "concurrently -n \"backend,frontend,admin\" -c \"bgBlue.bold,bgMagenta.bold,bgGreen.bold\" \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:admin\"",
-    "build:backend": "cd packages/backend && npm run build",
-    "build:frontend": "cd packages/frontend && npm run build",
-    "build:admin": "cd packages/admin-frontend && npm run build",
+    "build:backend": "npm run build --workspace=packages/backend",
+    "build:frontend": "npm run build --workspace=packages/frontend",
+    "build:admin": "npm run build --workspace=packages/admin-frontend",
     "build": "npm run build:backend && npm run build:frontend && npm run build:admin",
     "start:backend": "cd packages/backend && npm start",
     "start:frontend": "cd packages/frontend && npm start",
@@ -29,8 +29,13 @@
   ],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
+  "dependencies": {
     "concurrently": "^8.2.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.23.4",
+    "@babel/core": "^7.23.5",
+    "@babel/preset-env": "^7.23.5"
   }
 }
 
