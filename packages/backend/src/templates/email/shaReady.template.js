@@ -96,7 +96,7 @@ module.exports = (data) => {
                 <strong>CoSpaces</strong> – Democratizing Land Investments
               </p>
               <p style="margin: 0 0 16px 0; color: #a0aec0; font-size: 12px;">
-                Questions? Email us at <a href="mailto:support@devopsenthusiasts.solutions" style="color: #667eea; text-decoration: none;">support@devopsenthusiasts.solutions</a>
+                Questions? Email us at <a href="mailto:support@plotacre.in" style="color: #667eea; text-decoration: none;">support@devopsenthusiasts.solutions</a>
               </p>
               <p style="margin: 0; color: #cbd5e0; font-size: 11px;">
                 © ${new Date().getFullYear()} CoSpaces. All rights reserved.
